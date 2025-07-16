@@ -562,19 +562,16 @@ DYOR: This ain't financial advice"""
             criteria = session.criteria
             logger.info(f"Executing gem research: {criteria.network}, {criteria.age}, {criteria.liquidity}, {criteria.mcap}")
             
-            # Get pools based on age selection
-            if criteria.age == 'last_48':
-                pools = session.new_pools_list or []
-            else:  # older_2_days
-                all_pools = await self.api_client.get_pools_paginated(criteria.network, max_pools=1000)
-                new_pool_addresses = {pool.get('id') for pool in (session.new_pools_list or [])}
-                pools = [pool for pool in all_pools if pool.get('id') not in new_pool_addresses]
+            pools = session.new_pools_list or []
+            logger.info(f"Using {len(pools)} pre-filtered pools from age selection")
             
             # Filter by liquidity
             filtered_pools = self._filter_pools_by_liquidity(pools, criteria.liquidity)
+            logger.info(f"After liquidity filter ({criteria.liquidity}): {len(filtered_pools)} pools")
             
             # Filter by market cap
             final_pools = self._filter_pools_by_market_cap(filtered_pools, criteria.mcap)
+            logger.info(f"After market cap filter ({criteria.mcap}): {len(final_pools)} pools")
             
             final_pools.sort(key=lambda p: float(p.get('attributes', {}).get('reserve_in_usd', 0)), reverse=True)
             
@@ -769,12 +766,37 @@ DYOR: This ain't financial advice"""
             session.step = 'liquidity'
             session.timestamp = time.time()
             
-            logger.info(f"Fetching new pools for network: {session.criteria.network}")
-            session.new_pools_list = await self.api_client.get_new_pools_paginated(
-                session.criteria.network, max_pools=1000
-            )
-            
-            logger.info(f"Fetched {len(session.new_pools_list)} new pools")
+            if age == 'last_48':
+                logger.info(f"Fetching new pools for network: {session.criteria.network}")
+                session.new_pools_list = await self.api_client.get_new_pools_paginated(
+                    session.criteria.network, max_pools=1000
+                )
+                logger.info(f"Fetched {len(session.new_pools_list)} new pools")
+                
+            elif age == 'older_2_days':
+                logger.info(f"Fetching established pools for network: {session.criteria.network}")
+                
+                new_pools = await self.api_client.get_new_pools_paginated(
+                    session.criteria.network, max_pools=1000
+                )
+                new_pool_addresses = set()
+                for pool in new_pools:
+                    contract = self._extract_contract_from_pool(pool)
+                    if contract:
+                        new_pool_addresses.add(contract)
+                
+                all_pools = await self.api_client.get_pools_paginated(
+                    session.criteria.network, sort="h24_volume_usd_desc", max_pools=1000
+                )
+                
+                older_pools = []
+                for pool in all_pools:
+                    contract = self._extract_contract_from_pool(pool)
+                    if contract and contract not in new_pool_addresses:
+                        older_pools.append(pool)
+                
+                session.new_pools_list = older_pools
+                logger.info(f"Fetched {len(older_pools)} older pools (excluded {len(new_pool_addresses)} new pools)")
             
         except Exception as e:
             logger.error(f"Error handling age selection: {e}")
