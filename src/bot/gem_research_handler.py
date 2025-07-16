@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from api.geckoterminal_client import TokenData
+from src.api.geckoterminal_client import TokenData
 
 logger = logging.getLogger(__name__)
 
