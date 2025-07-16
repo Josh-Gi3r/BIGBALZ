@@ -92,10 +92,13 @@ class TelegramBotHandler:
             self.alert_chats.add(chat_id)
             logger.info(f"Registered chat {chat_id} for alerts. Total chats: {len(self.alert_chats)}")
     
-    async def broadcast_alert(self, message: str, reply_markup=None):
+    async def broadcast_alert(self, message: str, reply_markup=None, alert_context=None):
         """Broadcast alert to all registered chats with auto-deletion"""
+        logger.info(f"📢 broadcast_alert called with message: {message[:100]}...")
+        logger.info(f"📢 Alert chats registered: {len(self.alert_chats) if self.alert_chats else 0}")
+        
         if not self.alert_chats:
-            logger.warning("No chats registered for alerts")
+            logger.warning("❌ No chats registered for alerts")
             return
         
         success_count = 0
@@ -103,6 +106,7 @@ class TelegramBotHandler:
         
         for chat_id in self.alert_chats.copy():  # Copy to avoid modification during iteration
             try:
+                logger.info(f"📤 Sending alert to chat {chat_id}")
                 sent_message = await self.application.bot.send_message(
                     chat_id=chat_id,
                     text=message,
@@ -110,6 +114,13 @@ class TelegramBotHandler:
                     reply_markup=reply_markup
                 )
                 success_count += 1
+                logger.info(f"✅ Alert sent successfully to chat {chat_id}")
+                
+                # Store alert context for button handlers if provided
+                if alert_context:
+                    session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
+                    session.alert_context = alert_context
+                    logger.info(f"📝 Stored alert context for chat {chat_id}: {alert_context}")
                 
                 # Schedule deletion for all broadcast messages (buttons or not)
                 await self._schedule_message_deletion(chat_id, sent_message.message_id, deletion_time)

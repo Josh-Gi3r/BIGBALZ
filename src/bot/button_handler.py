@@ -47,7 +47,12 @@ class ButtonHandler:
             'socials': self.handle_socials_button,
             'balz_rank': self.handle_balz_button,
             'whale_tracker': self.handle_whale_button,
-            'refresh_price': self.handle_refresh_button
+            'refresh_price': self.handle_refresh_button,
+            'alert_analyze': self.handle_alert_analyze_button,
+            'alert_socials': self.handle_alert_socials_button,
+            'alert_whale': self.handle_alert_whale_button,
+            'alert_balz': self.handle_alert_balz_button,
+            'back_to_alert': self.handle_back_to_alert_button
         }
         
     async def _schedule_message_deletion(self, chat_id: int, message_id: int, deletion_time: int):
@@ -1398,3 +1403,177 @@ class ButtonHandler:
 **Assessment:** {classification.reasoning}
 
 {self._get_random_savage_line()}"""
+    
+    async def handle_alert_analyze_button(self, query, callback_data: str):
+        """Handle alert analyze button press"""
+        try:
+            chat_id = query.message.chat_id
+            session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
+            
+            if not session or not hasattr(session, 'alert_context'):
+                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
+                return
+            
+            alert_context = session.alert_context
+            contract = alert_context['contract']
+            network = alert_context['network']
+            
+            # Get token info and analyze like normal token analysis
+            await query.edit_message_text("🔍 Analyzing token from alert...")
+            
+            token_data = await self.api_client.get_token_info(network, contract)
+            if not token_data:
+                await query.edit_message_text("❌ Unable to fetch token data. Please try again.")
+                return
+            
+            # Format token overview
+            from ..bot.message_formatter import MessageFormatter
+            overview = MessageFormatter.format_token_overview(token_data)
+            
+            # Create main buttons
+            buttons = self.create_token_overview_buttons()
+            
+            # Store in session for button navigation
+            session.current_token = token_data.symbol
+            session.current_contract = contract
+            session.current_network = network
+            session.current_token_data = token_data
+            
+            await query.edit_message_text(overview, reply_markup=buttons, parse_mode='Markdown')
+            
+        except Exception as e:
+            logger.error(f"Error handling alert analyze button: {e}")
+            await query.edit_message_text("❌ Error analyzing token. Please try again.")
+    
+    async def handle_alert_socials_button(self, query, callback_data: str):
+        """Handle alert socials button press"""
+        try:
+            chat_id = query.message.chat_id
+            session = self.session_manager.get_session(chat_id, 0)
+            
+            if not session or not hasattr(session, 'alert_context'):
+                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
+                return
+            
+            alert_context = session.alert_context
+            contract = alert_context['contract']
+            network = alert_context['network']
+            symbol = alert_context['symbol']
+            
+            # Get social data
+            social_data = await self.api_client.get_social_data(network, contract)
+            
+            if social_data:
+                response = self._format_social_response(social_data, symbol)
+            else:
+                response = f"📱 **Social Links for {symbol}**\n\n" \
+                          "ℹ️ No social information available for this token."
+            
+            # Create back button
+            back_button = InlineKeyboardMarkup([
+                [InlineKeyboardButton("← Back to Alert", callback_data="back_to_alert")]
+            ])
+            
+            await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+            
+        except Exception as e:
+            logger.error(f"Error handling alert socials button: {e}")
+            await query.edit_message_text("❌ Error fetching social data. Please try again.")
+    
+    async def handle_alert_whale_button(self, query, callback_data: str):
+        """Handle alert whale button press"""
+        try:
+            chat_id = query.message.chat_id
+            session = self.session_manager.get_session(chat_id, 0)
+            
+            if not session or not hasattr(session, 'alert_context'):
+                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
+                return
+            
+            alert_context = session.alert_context
+            symbol = alert_context['symbol']
+            
+            response = f"🐋 **Whale Tracker: {symbol}**\n\n" \
+                      "❌ Unable to analyze whale activity for alerts.\n\n" \
+                      "For full whale analysis, use the 📊 Token Details button first."
+            
+            # Create back button
+            back_button = InlineKeyboardMarkup([
+                [InlineKeyboardButton("← Back to Alert", callback_data="back_to_alert")]
+            ])
+            
+            await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+            
+        except Exception as e:
+            logger.error(f"Error handling alert whale button: {e}")
+            await query.edit_message_text("❌ Error with whale tracker. Please try again.")
+    
+    async def handle_alert_balz_button(self, query, callback_data: str):
+        """Handle alert BALZ button press"""
+        try:
+            chat_id = query.message.chat_id
+            session = self.session_manager.get_session(chat_id, 0)
+            
+            if not session or not hasattr(session, 'alert_context'):
+                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
+                return
+            
+            alert_context = session.alert_context
+            contract = alert_context['contract']
+            network = alert_context['network']
+            symbol = alert_context['symbol']
+            
+            # Get token data for BALZ analysis
+            token_data = await self.api_client.get_token_info(network, contract)
+            if not token_data:
+                await query.edit_message_text("❌ Unable to fetch token data for BALZ analysis.")
+                return
+            
+            # Generate BALZ classification
+            classification = self.reasoning_engine.classify_token(token_data)
+            response = self._format_balz_response(classification, symbol)
+            
+            # Create back button
+            back_button = InlineKeyboardMarkup([
+                [InlineKeyboardButton("← Back to Alert", callback_data="back_to_alert")]
+            ])
+            
+            await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+            
+        except Exception as e:
+            logger.error(f"Error handling alert BALZ button: {e}")
+            await query.edit_message_text("❌ Error generating BALZ analysis. Please try again.")
+    
+    async def handle_back_to_alert_button(self, query, callback_data: str):
+        """Handle back to alert button press"""
+        try:
+            chat_id = query.message.chat_id
+            session = self.session_manager.get_session(chat_id, 0)
+            
+            if not session or not hasattr(session, 'alert_context'):
+                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
+                return
+            
+            alert_context = session.alert_context
+            alert_type = alert_context['type']
+            symbol = alert_context['symbol']
+            
+            # Recreate the original alert message and buttons
+            buttons = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
+                    InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
+                ],
+                [
+                    InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
+                    InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
+                ]
+            ])
+            
+            message = f"🔄 **Back to {alert_type.title()} Alert**\n\n**{symbol}** - Use the buttons below to analyze this token."
+            
+            await query.edit_message_text(message, reply_markup=buttons, parse_mode='Markdown')
+            
+        except Exception as e:
+            logger.error(f"Error handling back to alert button: {e}")
+            await query.edit_message_text("❌ Error returning to alert. Please wait for new alerts.")

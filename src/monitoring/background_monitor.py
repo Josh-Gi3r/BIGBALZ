@@ -36,7 +36,7 @@ class MoonshotAlert:
     token_symbol: str
     contract: str
     network: str
-    tier: str  # "100x", "10x", "2x"
+    tier: str  # "POTENTIAL 100X", "POTENTIAL 10X", "POTENTIAL 2X"
     price_change_percent: float
     volume_24h: float
     liquidity: float
@@ -488,31 +488,40 @@ class BackgroundMonitor:
     
     async def _broadcast_rug_alert(self, alert: RugAlert, network: str):
         """Broadcast rug pull alert"""
-        alert.network = network
-        
-        # Format message
-        message = self._format_rug_message(alert)
-        
-        # Create buttons for rug alert (same as moonshot)
-        # Just create the button markup directly without needing the handler
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        
-        # Log button data
-        logger.info(f"Creating rug alert buttons - network: '{alert.network}', contract: '{alert.contract}'")
-        
-        buttons = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("📊 Token Details", callback_data=f"alert_analyze_{alert.network}_{alert.contract}"),
-                InlineKeyboardButton("📱 Socials", callback_data=f"alert_socials_{alert.network}_{alert.contract}")
-            ],
-            [
-                InlineKeyboardButton("🐋 Whale Tracker", callback_data=f"alert_whale_{alert.network}_{alert.contract}"),
-                InlineKeyboardButton("⚖️ BALZ Rank", callback_data=f"alert_balz_{alert.network}_{alert.contract}")
-            ]
-        ])
-        
-        # Broadcast to all active chats with buttons
-        await self.bot_handler.broadcast_alert(message, buttons)
+        try:
+            alert.network = network
+            logger.info(f"💀 Broadcasting rug alert for {alert.token_symbol} on {alert.network}")
+            
+            # Format message
+            message = self._format_rug_message(alert)
+            
+            # Create buttons for rug alert (same as moonshot)
+            # Just create the button markup directly without needing the handler
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            buttons = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
+                    InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
+                ],
+                [
+                    InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
+                    InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
+                ]
+            ])
+            
+            # Broadcast to all active chats with buttons
+            alert_context = {
+                'type': 'rug',
+                'contract': alert.contract,
+                'network': alert.network,
+                'symbol': alert.token_symbol
+            }
+            await self.bot_handler.broadcast_alert(message, buttons, alert_context)
+            logger.info(f"✅ Rug alert broadcast completed for {alert.token_symbol}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error broadcasting rug alert: {e}")
     
     def _format_rug_message(self, alert: RugAlert) -> str:
         """Format rug pull alert message"""
@@ -1006,25 +1015,38 @@ class BackgroundMonitor:
     
     async def _broadcast_moonshot_alert(self, alert: MoonshotAlert):
         """Broadcast moonshot alert with buttons"""
-        # Format message
-        message = self._format_moonshot_message(alert)
-        
-        # Create buttons for moonshot alert
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        
-        buttons = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("📊 Token Details", callback_data=f"alert_analyze_{alert.network}_{alert.contract}"),
-                InlineKeyboardButton("📱 Socials", callback_data=f"alert_socials_{alert.network}_{alert.contract}")
-            ],
-            [
-                InlineKeyboardButton("🐋 Whale Tracker", callback_data=f"alert_whale_{alert.network}_{alert.contract}"),
-                InlineKeyboardButton("⚖️ BALZ Rank", callback_data=f"alert_balz_{alert.network}_{alert.contract}")
-            ]
-        ])
-        
-        # Broadcast to all active chats
-        await self.bot_handler.broadcast_alert(message, buttons)
+        try:
+            logger.info(f"🚀 Broadcasting moonshot alert for {alert.token_symbol} on {alert.network}")
+            
+            # Format message
+            message = self._format_moonshot_message(alert)
+            
+            # Create buttons for moonshot alert
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            buttons = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
+                    InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
+                ],
+                [
+                    InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
+                    InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
+                ]
+            ])
+            
+            # Broadcast to all active chats
+            alert_context = {
+                'type': 'moonshot',
+                'contract': alert.contract,
+                'network': alert.network,
+                'symbol': alert.token_symbol
+            }
+            await self.bot_handler.broadcast_alert(message, buttons, alert_context)
+            logger.info(f"✅ Moonshot alert broadcast completed for {alert.token_symbol}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error broadcasting moonshot alert: {e}")
     
     def _format_moonshot_message(self, alert: MoonshotAlert) -> str:
         """Format moonshot alert message"""
@@ -1038,12 +1060,12 @@ class BackgroundMonitor:
         
         # Tier-specific config
         tier_config = {
-            "100x": {"emoji": "🚀", "timeframe": "5m"},
-            "10x": {"emoji": "⚡", "timeframe": "1h"},
-            "2x": {"emoji": "💰", "timeframe": "24h"}
+            "POTENTIAL 100X": {"emoji": "🚀", "timeframe": "5m"},
+            "POTENTIAL 10X": {"emoji": "⚡", "timeframe": "1h"},
+            "POTENTIAL 2X": {"emoji": "💰", "timeframe": "24h"}
         }
         
-        config = tier_config[alert.tier]
+        config = tier_config.get(alert.tier, {"emoji": "🚀", "timeframe": "5m"})
         
         # Get random savage line
         savage_lines = [
