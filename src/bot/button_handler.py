@@ -1161,7 +1161,7 @@ class ButtonHandler:
         await query.edit_message_text(loading_message, parse_mode='Markdown')
         
         # Execute research
-        gems = await gem_handler.execute_gem_research(session.criteria)
+        gems = await gem_handler.execute_gem_research(session)
         
         if not gems:
             # No gems found
@@ -1179,7 +1179,7 @@ class ButtonHandler:
             session.results = gems
             session.current_index = 0
             
-            message, buttons = gem_handler.format_single_gem_result(
+            message, buttons = gem_handler.format_single_gem_result_from_pool(
                 gems[0], session.criteria, 0, len(gems)
             )
             await query.edit_message_text(
@@ -1341,7 +1341,7 @@ class ButtonHandler:
         
         # Show new gem
         current_gem = session.results[session.current_index]
-        message, buttons = gem_handler.format_single_gem_result(
+        message, buttons = gem_handler.format_single_gem_result_from_pool(
             current_gem, session.criteria, session.current_index, len(session.results)
         )
         
@@ -1369,7 +1369,7 @@ class ButtonHandler:
         
         # Show current gem
         current_gem = session.results[session.current_index]
-        message, buttons = gem_handler.format_single_gem_result(
+        message, buttons = gem_handler.format_single_gem_result_from_pool(
             current_gem, session.criteria, session.current_index, len(session.results)
         )
         
