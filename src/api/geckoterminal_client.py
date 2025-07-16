@@ -503,6 +503,8 @@ class GeckoTerminalClient:
                     enriched_attrs['market_cap_usd'] = token_data.get('market_cap_usd')
                     enriched_attrs['fdv_usd'] = token_data.get('fdv_usd')
                     
+                    enriched_pool['_token_data'] = token_data
+                    
                     enriched_pool['attributes'] = enriched_attrs
                     enriched_pools.append(enriched_pool)
             

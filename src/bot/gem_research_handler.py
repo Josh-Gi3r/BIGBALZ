@@ -612,20 +612,38 @@ DYOR: This ain't financial advice"""
             market_cap_usd = attrs.get('market_cap_usd')
             
             if market_cap_usd is None:
-                if mcap == 'micro':  # Under $1M - include new tokens with no market cap data
-                    filtered_pools.append(pool)
-                continue
+                try:
+                    price = float(attrs.get('base_token_price_usd', 0))
+                    
+                    token_data = pool.get('_token_data', {})
+                    total_supply = float(token_data.get('total_supply', 0))
+                    
+                    if price > 0 and total_supply > 0:
+                        market_cap_usd = price * total_supply
+                        attrs['market_cap_usd'] = str(market_cap_usd)
+                        logger.debug(f"Calculated market cap: ${market_cap_usd:,.0f} for token")
+                    else:
+                        if mcap == 'micro':
+                            filtered_pools.append(pool)
+                        continue
+                except (ValueError, TypeError, AttributeError):
+                    if mcap == 'micro':
+                        filtered_pools.append(pool)
+                    continue
             
             try:
-                market_cap_usd = float(market_cap_usd)
+                market_cap = float(market_cap_usd)
                 
-                if mcap == 'micro' and market_cap_usd < 1000000:
+                if mcap == 'micro' and market_cap < 1000000:
                     filtered_pools.append(pool)
-                elif mcap == 'small' and 1000000 <= market_cap_usd <= 10000000:
+                elif mcap == 'small' and 1000000 <= market_cap <= 10000000:
                     filtered_pools.append(pool)
-                elif mcap == 'mid' and 10000000 <= market_cap_usd <= 50000000:
+                elif mcap == 'mid' and 10000000 <= market_cap <= 50000000:
                     filtered_pools.append(pool)
+                    
             except (ValueError, TypeError):
+                if mcap == 'micro':
+                    filtered_pools.append(pool)
                 continue
         
         return filtered_pools

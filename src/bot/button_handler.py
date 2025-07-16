@@ -1222,6 +1222,8 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=buttons
         )
+        deletion_time = 25 * 60
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
         # Schedule deletion
         deletion_time = 25 * 60  # 25 minutes
         await self._schedule_message_deletion(chat_id, message_id, deletion_time)
