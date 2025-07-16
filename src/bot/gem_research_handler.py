@@ -609,14 +609,24 @@ DYOR: This ain't financial advice"""
         
         for pool in pools:
             attrs = pool.get('attributes', {})
-            market_cap_usd = float(attrs.get('market_cap_usd', 0))
+            market_cap_usd = attrs.get('market_cap_usd')
             
-            if mcap == 'micro' and market_cap_usd < 1000000:
-                filtered_pools.append(pool)
-            elif mcap == 'small' and 1000000 <= market_cap_usd <= 10000000:
-                filtered_pools.append(pool)
-            elif mcap == 'mid' and 10000000 <= market_cap_usd <= 50000000:
-                filtered_pools.append(pool)
+            if market_cap_usd is None:
+                if mcap == 'micro':  # Under $1M - include new tokens with no market cap data
+                    filtered_pools.append(pool)
+                continue
+            
+            try:
+                market_cap_usd = float(market_cap_usd)
+                
+                if mcap == 'micro' and market_cap_usd < 1000000:
+                    filtered_pools.append(pool)
+                elif mcap == 'small' and 1000000 <= market_cap_usd <= 10000000:
+                    filtered_pools.append(pool)
+                elif mcap == 'mid' and 10000000 <= market_cap_usd <= 50000000:
+                    filtered_pools.append(pool)
+            except (ValueError, TypeError):
+                continue
         
         return filtered_pools
     
