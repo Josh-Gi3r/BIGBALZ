@@ -144,7 +144,7 @@ class GeckoTerminalClient:
         
         # Setup headers
         self.headers = {
-            'Accept': 'application/json',
+            'Accept': 'application/json;version=20230302',
             'User-Agent': 'BIGBALZ-Bot/1.0'
         }
         
@@ -445,8 +445,7 @@ class GeckoTerminalClient:
         Returns:
             List of new pool data
         """
-        # Correct endpoint path for GeckoTerminal API
-        url = f"{self.BASE_URL}/networks/{network}/new_pools"
+        url = f"{self.BASE_URL}/networks/new_pools"
         url += f"?limit={limit}"
         
         data = await self._make_request(url, priority=3)
@@ -455,6 +454,40 @@ class GeckoTerminalClient:
             return []
             
         return data.get('data', [])
+    
+    async def get_new_pools_paginated(self, network: str, max_pools: int = 1000) -> List[Dict]:
+        """
+        Get newly created pools with pagination
+        
+        Args:
+            network: Network identifier
+            max_pools: Maximum pools to fetch (up to 1000)
+            
+        Returns:
+            List of new pool data
+        """
+        all_pools = []
+        for page in range(1, 11):
+            url = f"{self.BASE_URL}/networks/new_pools?page={page}"
+            data = await self._make_request(url, priority=3)
+            
+            if not data or not data.get('data'):
+                break
+                
+            pools = data.get('data', [])
+            
+            network_pools = []
+            for pool in pools:
+                pool_attrs = pool.get('attributes', {})
+                if pool_attrs.get('network') == network:
+                    network_pools.append(pool)
+            
+            all_pools.extend(network_pools)
+            
+            if len(all_pools) >= max_pools:
+                break
+        
+        return all_pools[:max_pools]
         
     async def get_pool_info(self, network: str, pool_address: str) -> Optional[Dict]:
         """
@@ -502,6 +535,34 @@ class GeckoTerminalClient:
             return []
             
         return data.get('data', [])
+    
+    async def get_pools_paginated(self, network: str, sort: str = "h24_volume_usd_desc", 
+                                 max_pools: int = 1000) -> List[Dict]:
+        """
+        Get pools with pagination and sorting
+        
+        Args:
+            network: Network identifier
+            sort: Sort parameter
+            max_pools: Maximum pools to fetch
+            
+        Returns:
+            List of pool data
+        """
+        all_pools = []
+        for page in range(1, 11):
+            url = f"{self.BASE_URL}/networks/{network}/pools?sort={sort}&page={page}"
+            data = await self._make_request(url, priority=3)
+            
+            if not data or not data.get('data'):
+                break
+                
+            all_pools.extend(data.get('data', []))
+            
+            if len(all_pools) >= max_pools:
+                break
+        
+        return all_pools[:max_pools]
     
     async def get_pool_ohlcv(self, network: str, pool_address: str, 
                            timeframe: str = "day", aggregate: int = 1, 

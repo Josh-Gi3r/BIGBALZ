@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from ..api.geckoterminal_client import TokenData
+from api.geckoterminal_client import TokenData
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class GemCriteria:
     """Gem research criteria from user selections"""
     network: str
-    age: str  # 'fresh' or 'early'
+    age: str  # 'last_48' or 'older_2_days'
     liquidity: str  # '10_50', '50_250', '250_1000', '1000_plus'
     mcap: str  # 'micro', 'small', 'mid'
 
@@ -30,15 +30,21 @@ class GemResearchSession:
     user_id: int
     step: str  # 'network', 'age', 'liquidity', 'mcap', 'results'
     criteria: Optional[GemCriteria] = None
-    results: List[TokenData] = None
+    results: List[Dict] = None
     current_index: int = 0
     timestamp: float = None
+    new_pools_list: List[Dict] = None
+    final_pools: List[Dict] = None
     
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = time.time()
         if self.results is None:
             self.results = []
+        if self.new_pools_list is None:
+            self.new_pools_list = []
+        if self.final_pools is None:
+            self.final_pools = []
 
 
 @dataclass
@@ -474,7 +480,7 @@ Market conditions:
         fdv_analysis = self.format_fdv_analysis(token_data)
         
         # Format numbers
-        from ..bot.message_formatter import MessageFormatter
+        from bot.message_formatter import MessageFormatter
         price = MessageFormatter._format_price(token_data.price_usd)
         market_cap = MessageFormatter._format_large_number(token_data.market_cap_usd)
         fdv = MessageFormatter._format_large_number(token_data.fdv_usd)
@@ -547,187 +553,206 @@ DYOR: This ain't financial advice"""
         
         return message, buttons
     
-    async def execute_gem_research(self, criteria: GemCriteria) -> List[TokenData]:
+    async def execute_gem_research(self, session: GemResearchSession) -> List[Dict]:
         """
-        Execute gem research based on criteria
+        Execute gem research based on session criteria
         
-        Args:
-            criteria: Research criteria from user
-            
         Returns:
-            List of TokenData objects matching criteria
+            List of pool data matching criteria
         """
         try:
+            criteria = session.criteria
             logger.info(f"Executing gem research: {criteria.network}, {criteria.age}, {criteria.liquidity}, {criteria.mcap}")
             
-            gems = []
+            # Get pools based on age selection
+            if criteria.age == 'last_48':
+                pools = session.new_pools_list or []
+            else:  # older_2_days
+                all_pools = await self.api_client.get_pools_paginated(criteria.network, max_pools=1000)
+                new_pool_addresses = {pool.get('id') for pool in (session.new_pools_list or [])}
+                pools = [pool for pool in all_pools if pool.get('id') not in new_pool_addresses]
             
-            if criteria.age == 'fresh':
-                # Fresh launches: Get new pools and filter
-                gems = await self._search_fresh_launches(criteria)
-            else:  # early
-                # Early stage: Get pools and verify age with OHLCV
-                gems = await self._search_early_stage(criteria)
+            # Filter by liquidity
+            filtered_pools = self._filter_pools_by_liquidity(pools, criteria.liquidity)
             
-            # Apply market cap filtering
-            filtered_gems = self._filter_by_market_cap(gems, criteria.mcap)
+            # Filter by market cap
+            final_pools = self._filter_pools_by_market_cap(filtered_pools, criteria.mcap)
             
-            # Limit to 10 results max
-            return filtered_gems[:10]
+            final_pools.sort(key=lambda p: float(p.get('attributes', {}).get('reserve_in_usd', 0)), reverse=True)
+            
+            return final_pools[:10]
             
         except Exception as e:
             logger.error(f"Error executing gem research: {e}")
             return []
     
-    async def _search_fresh_launches(self, criteria: GemCriteria) -> List[TokenData]:
-        """Search for fresh launches (<48h old)"""
-        try:
-            # Get new pools
-            pools = await self.api_client.get_new_pools(criteria.network, limit=50)
-            if not pools:
-                return []
+    def _filter_pools_by_liquidity(self, pools: List[Dict], liquidity: str) -> List[Dict]:
+        """Filter pools by liquidity criteria"""
+        filtered_pools = []
+        
+        for pool in pools:
+            attrs = pool.get('attributes', {})
+            reserve_usd = float(attrs.get('reserve_in_usd', 0))
             
-            gems = []
-            checked_count = 0
-            
-            for pool in pools:
-                # Rate limiting - check max 15 tokens to stay under 30 calls/min
-                if checked_count >= 15:
-                    break
-                
-                # Extract liquidity from pool
-                attrs = pool.get('attributes', {})
-                liquidity = float(attrs.get('reserve_in_usd', 0))
-                
-                # Filter by liquidity first (cheaper than API calls)
-                if not self._meets_liquidity_criteria(liquidity, criteria.liquidity):
-                    continue
-                
-                # Extract contract address
-                contract = self._extract_contract_from_pool(pool)
-                if not contract:
-                    continue
-                
-                # Get full token info
-                token_data = await self.api_client.get_token_info(criteria.network, contract)
-                if token_data:
-                    gems.append(token_data)
-                    checked_count += 1
-            
-            logger.info(f"Found {len(gems)} fresh launch gems after checking {checked_count} tokens")
-            return gems
-            
-        except Exception as e:
-            logger.error(f"Error searching fresh launches: {e}")
-            return []
+            if liquidity == '10_50' and 10000 <= reserve_usd <= 50000:
+                filtered_pools.append(pool)
+            elif liquidity == '50_250' and 50000 <= reserve_usd <= 250000:
+                filtered_pools.append(pool)
+            elif liquidity == '250_1000' and 250000 <= reserve_usd <= 1000000:
+                filtered_pools.append(pool)
+            elif liquidity == '1000_plus' and reserve_usd >= 1000000:
+                filtered_pools.append(pool)
+        
+        return filtered_pools
     
-    async def _search_early_stage(self, criteria: GemCriteria) -> List[TokenData]:
-        """Search for early stage gems (3-7 days old)"""
-        try:
-            # Get pools sorted by volume
-            pools = await self.api_client.get_pools_search(
-                criteria.network, 
-                sort="h24_volume_usd_desc", 
-                limit=100
-            )
-            if not pools:
-                return []
+    def _filter_pools_by_market_cap(self, pools: List[Dict], mcap: str) -> List[Dict]:
+        """Filter pools by market cap criteria"""
+        filtered_pools = []
+        
+        for pool in pools:
+            attrs = pool.get('attributes', {})
+            market_cap_usd = float(attrs.get('market_cap_usd', 0))
             
-            gems = []
-            checked_count = 0
-            
-            for pool in pools:
-                # Rate limiting - check max 10 tokens for early stage due to OHLCV calls
-                if checked_count >= 10:
-                    break
-                
-                # Extract liquidity from pool
-                attrs = pool.get('attributes', {})
-                liquidity = float(attrs.get('reserve_in_usd', 0))
-                
-                # Filter by liquidity first
-                if not self._meets_liquidity_criteria(liquidity, criteria.liquidity):
-                    continue
-                
-                # Verify age using OHLCV data
-                pool_address = pool.get('id')  # Pool ID is the address
-                if not pool_address:
-                    continue
-                
-                # Get OHLCV data to verify age
-                ohlcv_data = await self.api_client.get_pool_ohlcv(
-                    criteria.network, 
-                    pool_address,
-                    timeframe="day",
-                    aggregate=1,
-                    limit=7
-                )
-                
-                # Count candles to determine age
-                if not ohlcv_data or len(ohlcv_data) < 3 or len(ohlcv_data) > 7:
-                    continue  # Skip if not 3-7 days old
-                
-                # Extract contract and get token info
-                contract = self._extract_contract_from_pool(pool)
-                if not contract:
-                    continue
-                
-                token_data = await self.api_client.get_token_info(criteria.network, contract)
-                if token_data:
-                    gems.append(token_data)
-                    checked_count += 1
-            
-            logger.info(f"Found {len(gems)} early stage gems after checking {checked_count} tokens")
-            return gems
-            
-        except Exception as e:
-            logger.error(f"Error searching early stage gems: {e}")
-            return []
+            if mcap == 'micro' and market_cap_usd < 1000000:
+                filtered_pools.append(pool)
+            elif mcap == 'small' and 1000000 <= market_cap_usd <= 10000000:
+                filtered_pools.append(pool)
+            elif mcap == 'mid' and 10000000 <= market_cap_usd <= 50000000:
+                filtered_pools.append(pool)
+        
+        return filtered_pools
     
     def _extract_contract_from_pool(self, pool: Dict) -> Optional[str]:
-        """Extract contract address from pool relationships"""
+        """Extract contract address from pool data using relationships.base_token.data.id"""
         try:
             relationships = pool.get('relationships', {})
             base_token = relationships.get('base_token', {})
-            base_token_data = base_token.get('data', {})
-            base_token_id = base_token_data.get('id', '')
+            data = base_token.get('data', {})
+            token_id = data.get('id')
             
-            if base_token_id and '_' in base_token_id:
-                # Format is "network_contractaddress"
-                return base_token_id.split('_', 1)[1]
-            
+            if token_id:
+                # Extract just the address part after the network prefix
+                if '_' in token_id:
+                    return token_id.split('_', 1)[1]
+                return token_id
             return None
         except Exception:
             return None
     
-    def _meets_liquidity_criteria(self, liquidity: float, criteria: str) -> bool:
-        """Check if liquidity meets criteria"""
-        ranges = {
-            '10_50': (10000, 50000),
-            '50_250': (50000, 250000),
-            '250_1000': (250000, 1000000),
-            '1000_plus': (1000000, float('inf'))
-        }
+    def _classify_gem_from_pool(self, pool: Dict, criteria: GemCriteria) -> GemClassification:
+        """Classify gem based on pool data and criteria"""
+        attrs = pool.get('attributes', {})
+        market_cap = float(attrs.get('market_cap_usd', 0))
+        liquidity = float(attrs.get('reserve_in_usd', 0))
         
-        min_liq, max_liq = ranges.get(criteria, (0, float('inf')))
-        return min_liq <= liquidity <= max_liq
+        # Classification logic based on user's specification
+        if criteria.mcap == 'micro' and criteria.liquidity == '10_50' and criteria.age == 'last_48':
+            return self.classifications['degen_play']
+        elif criteria.mcap == 'micro' and criteria.liquidity == '50_250' and criteria.age == 'older_2_days':
+            return self.classifications['early_gem']
+        elif criteria.mcap == 'small' and criteria.liquidity in ['50_250', '250_1000']:
+            return self.classifications['growing_project']
+        elif criteria.mcap == 'small' and criteria.liquidity in ['250_1000', '1000_plus']:
+            return self.classifications['momentum_play']
+        elif criteria.mcap == 'mid' and criteria.liquidity in ['250_1000', '1000_plus'] and criteria.age == 'older_2_days':
+            return self.classifications['established_mover']
+        elif criteria.mcap == 'mid' and criteria.liquidity == '1000_plus' and criteria.age == 'older_2_days':
+            return self.classifications['safe_bet']
+        elif criteria.mcap == 'micro' and criteria.liquidity in ['250_1000', '1000_plus'] and criteria.age == 'last_48':
+            return self.classifications['liquidity_trap']
+        elif liquidity < 50000:
+            return self.classifications['zombie_coin']
+        else:
+            return self.classifications['growing_project']
     
-    def _filter_by_market_cap(self, gems: List[TokenData], mcap_criteria: str) -> List[TokenData]:
-        """Filter gems by market cap criteria"""
-        ranges = {
-            'micro': (0, 1000000),
-            'small': (1000000, 10000000),
-            'mid': (10000000, 50000000)
-        }
-        
-        min_mcap, max_mcap = ranges.get(mcap_criteria, (0, float('inf')))
-        
-        filtered = []
-        for gem in gems:
-            if min_mcap <= gem.market_cap_usd <= max_mcap:
-                filtered.append(gem)
-        
-        return filtered
+    def format_single_gem_result_from_pool(self, pool: Dict, criteria: GemCriteria, index: int = 0, total: int = 1) -> Tuple[str, InlineKeyboardMarkup]:
+        """Format single gem result from pool data"""
+        try:
+            attrs = pool.get('attributes', {})
+            
+            # Extract data from pool
+            symbol = attrs.get('base_token_symbol', 'UNKNOWN')
+            contract_address = self._extract_contract_from_pool(pool)
+            network = criteria.network
+            market_cap = float(attrs.get('market_cap_usd', 0))
+            fdv = float(attrs.get('fdv_usd', 0))
+            liquidity = float(attrs.get('reserve_in_usd', 0))
+            volume_24h = float(attrs.get('volume_usd', {}).get('h24', 0))
+            tx_count = attrs.get('transactions', {}).get('h24', 0)
+            price_change_24h = attrs.get('price_change_percentage', {}).get('h24', 0)
+            
+            # Calculate circulating percentage
+            circulating_percent = (market_cap / fdv * 100) if fdv > 0 else 0
+            
+            # Get classification
+            classification = self._classify_gem_from_pool(pool, criteria)
+            
+            # Format message
+            message = f"""Found {index + 1} of {total} gems on {network.upper()} matching your criteria:
+
+{classification.emoji} {classification.name}
+
+${symbol}
+
+💰 MCap: ${market_cap:,.0f} | FDV: ${fdv:,.0f} ({circulating_percent:.1f}% circulating)
+💧 Liquidity: ${liquidity:,.0f}
+📊 Volume 24h: ${volume_24h:,.0f} | Txs: {tx_count}
+📈 24h: {price_change_24h:.1f}%
+
+📱 Contract: `{contract_address}`
+🌐 Network: {network}
+
+Real talk, this is gambling not investing 🎲
+
+---
+
+🔍 GEM CLASSIFICATIONS:
+
+🚀 POTENTIAL DEGEN PLAY = Ultra early, 100x or zero
+💎 POTENTIAL EARLY GEM = 10-50x possible, high risk
+🌱 POTENTIAL GROWING PROJECT = 5-20x realistic
+⚡ POTENTIAL MOMENTUM PLAY = 3-10x short term
+🏛️ POTENTIAL ESTABLISHED MOVER = 2-5x steady
+🛡️ POTENTIAL SAFE BET = 2-3x stable (in crypto terms)
+
+---
+
+⚠️ REALITY CHECK
+
+FDV/MCap: {self.format_fdv_analysis(market_cap, fdv)}
+Can't verify: Contract safety, holder distribution, team
+High risk: Liquidity can vanish, prices can nuke
+DYOR: This ain't financial advice"""
+
+            # Create buttons
+            buttons = self.create_gem_action_buttons(network, contract_address, index, total)
+            
+            return message, buttons
+            
+        except Exception as e:
+            logger.error(f"Error formatting gem result: {e}")
+            return "Error formatting gem result", InlineKeyboardMarkup([])
+    
+    async def handle_age_selection(self, session: GemResearchSession, age: str):
+        """Handle age selection and fetch pool data"""
+        try:
+            # Update session criteria
+            if session.criteria is None:
+                session.criteria = GemCriteria(network='', age='', liquidity='', mcap='')
+            session.criteria.age = age
+            session.step = 'liquidity'
+            session.timestamp = time.time()
+            
+            logger.info(f"Fetching new pools for network: {session.criteria.network}")
+            session.new_pools_list = await self.api_client.get_new_pools_paginated(
+                session.criteria.network, max_pools=1000
+            )
+            
+            logger.info(f"Fetched {len(session.new_pools_list)} new pools")
+            
+        except Exception as e:
+            logger.error(f"Error handling age selection: {e}")
+            session.new_pools_list = []
     
     def format_whale_tracker_message(self, token_symbol: str) -> Tuple[str, InlineKeyboardMarkup]:
         """Format whale tracker limitation message"""
@@ -830,3 +855,19 @@ Risk Factors:
         session_key = f"{chat_id}_{user_id}"
         if session_key in self.research_sessions:
             del self.research_sessions[session_key]
+    
+    def format_socials_message(self, token_symbol: str) -> Tuple[str, InlineKeyboardMarkup]:
+        """Format social links limitation message"""
+        message = """📱 Social Links
+
+Social media info not available through our data source.
+
+To find socials:
+1. Search token symbol on Twitter/X
+2. Check blockchain explorers
+3. Look for official announcements
+
+[← Back to Gem]"""
+        
+        buttons = self.create_gem_detail_back_button(0)
+        return message, buttons
