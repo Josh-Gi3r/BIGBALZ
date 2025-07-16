@@ -25,7 +25,7 @@ class TelegramBotHandler:
     
     def __init__(self, token: str, api_client=None, balz_engine=None, 
                  button_handler=None, session_manager=None, conversation_handler=None,
-                 background_monitor=None, settings=None):
+                 background_monitor=None):
         """
         Initialize the Telegram bot handler
         
@@ -37,7 +37,6 @@ class TelegramBotHandler:
             session_manager: Session state manager
             conversation_handler: AI conversation handler for general chat
             background_monitor: Background monitoring system
-            settings: Application settings configuration
         """
         self.token = token
         self.api_client = api_client
@@ -46,7 +45,6 @@ class TelegramBotHandler:
         self.session_manager = session_manager
         self.conversation_handler = conversation_handler
         self.background_monitor = background_monitor
-        self.settings = settings
         self.application = None
         
         # Track chats for alerts
@@ -94,13 +92,10 @@ class TelegramBotHandler:
             self.alert_chats.add(chat_id)
             logger.info(f"Registered chat {chat_id} for alerts. Total chats: {len(self.alert_chats)}")
     
-    async def broadcast_alert(self, message: str, reply_markup=None, alert_context=None):
+    async def broadcast_alert(self, message: str, reply_markup=None):
         """Broadcast alert to all registered chats with auto-deletion"""
-        logger.info(f"📢 broadcast_alert called with message: {message[:100]}...")
-        logger.info(f"📢 Alert chats registered: {len(self.alert_chats) if self.alert_chats else 0}")
-        
         if not self.alert_chats:
-            logger.warning("❌ No chats registered for alerts")
+            logger.warning("No chats registered for alerts")
             return
         
         success_count = 0
@@ -108,7 +103,6 @@ class TelegramBotHandler:
         
         for chat_id in self.alert_chats.copy():  # Copy to avoid modification during iteration
             try:
-                logger.info(f"📤 Sending alert to chat {chat_id}")
                 sent_message = await self.application.bot.send_message(
                     chat_id=chat_id,
                     text=message,
@@ -116,22 +110,6 @@ class TelegramBotHandler:
                     reply_markup=reply_markup
                 )
                 success_count += 1
-                logger.info(f"✅ Alert sent successfully to chat {chat_id}")
-                
-                # Store alert context for button handlers if provided
-                if alert_context:
-                    session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
-                    if not session:
-                        session = self.session_manager.create_session(
-                            chat_id=chat_id,
-                            user_id=0,
-                            token_name=alert_context.get('symbol', 'Alert'),
-                            contract=alert_context.get('contract', ''),
-                            network=alert_context.get('network', ''),
-                            token_data={}
-                        )
-                    session.alert_context = alert_context
-                    logger.info(f"📝 Stored alert context for chat {chat_id}: {alert_context}")
                 
                 # Schedule deletion for all broadcast messages (buttons or not)
                 await self._schedule_message_deletion(chat_id, sent_message.message_id, deletion_time)
@@ -149,11 +127,11 @@ class TelegramBotHandler:
         async with self.deletion_lock:
             key = f"{chat_id}_{message_id}"
             self.scheduled_deletions[key] = (chat_id, deletion_time)
-            logger.info(f"📅 Scheduled deletion for message {message_id} in chat {chat_id} at {deletion_time} (in {(deletion_time - time.time())/60:.1f} minutes)")
+            logger.debug(f"Scheduled deletion for message {message_id} in chat {chat_id} at {deletion_time}")
     
     async def _cleanup_expired_messages(self):
         """Background task to delete expired messages"""
-        logger.info("🧹 Message cleanup task started")
+        logger.info("Message cleanup task started")
         
         while True:
             try:
@@ -162,54 +140,41 @@ class TelegramBotHandler:
                 
                 async with self.deletion_lock:
                     # Find expired messages
-                    total_scheduled = len(self.scheduled_deletions)
-                    logger.debug(f"🔍 Checking {total_scheduled} scheduled deletions at {current_time}")
-                    
                     for key, (chat_id, deletion_time) in self.scheduled_deletions.items():
                         if current_time >= deletion_time:
                             messages_to_delete.append((key, chat_id))
-                            logger.debug(f"⏰ Message {key} expired (scheduled: {deletion_time}, current: {current_time})")
                 
                 # Delete expired messages
                 for key, chat_id in messages_to_delete:
                     try:
                         message_id = int(key.split('_')[1])
-                        
-                        if not self.application or not self.application.bot:
-                            logger.error(f"❌ Bot application not initialized - cannot delete message {message_id}")
-                            continue
-                            
                         await self.application.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         
                         async with self.deletion_lock:
                             del self.scheduled_deletions[key]
                             
-                        logger.info(f"🗑️ Successfully deleted expired message {message_id} from chat {chat_id}")
+                        logger.debug(f"Deleted expired message {message_id} from chat {chat_id}")
                     except Exception as e:
-                        logger.error(f"❌ Failed to delete message {key}: {e}")
+                        logger.error(f"Failed to delete message {key}: {e}")
                         # Remove from tracking even if deletion failed
                         async with self.deletion_lock:
                             self.scheduled_deletions.pop(key, None)
                 
                 if messages_to_delete:
-                    logger.info(f"🧹 Cleaned up {len(messages_to_delete)} expired messages")
-                elif len(self.scheduled_deletions) > 0:
-                    logger.debug(f"⏳ {len(self.scheduled_deletions)} messages still scheduled for future deletion")
+                    logger.info(f"Cleaned up {len(messages_to_delete)} expired messages")
                 
                 # Check every 30 seconds
                 await asyncio.sleep(30)
                 
             except Exception as e:
-                logger.error(f"💥 Error in cleanup task: {e}", exc_info=True)
+                logger.error(f"Error in cleanup task: {e}")
                 await asyncio.sleep(60)  # Wait longer on error
     
     async def start_cleanup_task(self):
         """Start the message cleanup background task"""
         if not self.cleanup_task:
-            if not self.application:
-                logger.warning("⚠️ Bot application not initialized yet - cleanup task may fail")
             self.cleanup_task = asyncio.create_task(self._cleanup_expired_messages())
-            logger.info("🧹 Message cleanup task created and started")
+            logger.info("Message cleanup task created")
     
     async def stop_cleanup_task(self):
         """Stop the cleanup task"""
@@ -227,8 +192,9 @@ class TelegramBotHandler:
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             user_id = update.effective_user.id
+            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in self.settings.allowed_dm_users:
+            if user_id not in ALLOWED_DM_USERS:
                 await update.message.reply_text(
                     "commands in my DMs? really?\n\ngo to @MUSKYBALZAC if you need help. i don't do private tutorials"
                 )
@@ -256,8 +222,9 @@ Looking forward to chatting with you!"""
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             user_id = update.effective_user.id
+            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in self.settings.allowed_dm_users:
+            if user_id not in ALLOWED_DM_USERS:
                 await update.message.reply_text(
                     "need help? in private? sus...\n\njoin @MUSKYBALZAC and ask there. i'm sure someone will help (maybe)"
                 )
@@ -302,8 +269,9 @@ Contact: @YourSupportHandle"""
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             user_id = update.effective_user.id
+            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in self.settings.allowed_dm_users:
+            if user_id not in ALLOWED_DM_USERS:
                 await update.message.reply_text(
                     "wanna know about me? in private? creepy...\n\n@MUSKYBALZAC is where i share my life story"
                 )
@@ -349,8 +317,9 @@ I'm here to make our community a great place to hang out, learn, and share ideas
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             # Only allow specific user ID (Josh)
+            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in self.settings.allowed_dm_users:
+            if user_id not in ALLOWED_DM_USERS:
                 # Send cheeky response about sliding into DMs
                 dm_responses = [
                     "whoa whoa whoa... sliding into my DMs? i don't do private shows\n\nhead to @MUSKYBALZAC and let's talk there. i'm not that kind of bot",
@@ -437,7 +406,7 @@ I'm here to make our community a great place to hang out, learn, and share ideas
             return
         
         # Import validator
-        from src.utils.validators import ContractValidator
+        from ..utils.validators import ContractValidator
         
         # First check if it's a valid contract address
         is_valid, network, error = ContractValidator.validate_contract(message_text)
@@ -601,7 +570,7 @@ I'm here to make our community a great place to hang out, learn, and share ideas
             )
             
             # Format token overview message
-            from src.bot.message_formatter import MessageFormatter
+            from ..bot.message_formatter import MessageFormatter
             overview_message = MessageFormatter.format_token_overview(token_data)
             
             # Create buttons

@@ -28,7 +28,8 @@ class NetworkDetector:
         if address.startswith('0x') and len(address) == 42:
             try:
                 int(address[2:], 16)  # Validate hex
-                return None
+                # Default to eth, but caller should try other EVM chains too
+                return "eth"
             except ValueError:
                 return None
         

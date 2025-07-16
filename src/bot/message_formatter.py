@@ -7,8 +7,8 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from src.utils.validators import ContractValidator
-from src.api.geckoterminal_client import TokenData
+from ..utils.validators import ContractValidator
+from ..api.geckoterminal_client import TokenData
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class MessageFormatter:
         Format moonshot alert message
         
         Args:
-            tier: Moonshot tier (POTENTIAL 100X, POTENTIAL 10X, POTENTIAL 2X)
+            tier: Moonshot tier (100x, 10x, 2x)
             token_data: Token information
             pool_data: Pool information
             
@@ -90,17 +90,17 @@ class MessageFormatter:
         """
         # Determine emoji and timeframe based on tier
         tier_config = {
-            'POTENTIAL 100X': ('🚀', '5m'),
-            'POTENTIAL 10X': ('⚡', '1h'),
-            'POTENTIAL 2X': ('💰', '24h')
+            '100x': ('🚀', '5m'),
+            '10x': ('⚡', '1h'),
+            '2x': ('💰', '24h')
         }
         emoji, timeframe = tier_config.get(tier, ('🚀', '5m'))
         
         # Get price change based on tier
         price_change = {
-            'POTENTIAL 100X': token_data.price_change_5m,
-            'POTENTIAL 10X': token_data.price_change_1h,
-            'POTENTIAL 2X': token_data.price_change_24h
+            '100x': token_data.price_change_5m,
+            '10x': token_data.price_change_1h,
+            '2x': token_data.price_change_24h
         }.get(tier, 0)
         
         # Format numbers
@@ -204,9 +204,9 @@ class MessageFormatter:
         
         # Handle both dict and int for moonshot_count
         if isinstance(moonshot_count, dict):
-            moonshot_100x = moonshot_count.get('POTENTIAL 100X', 0)
-            moonshot_10x = moonshot_count.get('POTENTIAL 10X', 0)
-            moonshot_2x = moonshot_count.get('POTENTIAL 2X', 0)
+            moonshot_100x = moonshot_count.get('100x', 0)
+            moonshot_10x = moonshot_count.get('10x', 0)
+            moonshot_2x = moonshot_count.get('2x', 0)
         else:
             # Legacy support
             moonshot_100x = moonshot_count

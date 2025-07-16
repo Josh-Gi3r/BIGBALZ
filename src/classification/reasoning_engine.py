@@ -6,12 +6,6 @@ Analyzes tokens based on liquidity, volume, market cap, and FDV ratios
 import logging
 from typing import Dict, Any, Tuple, Optional
 from dataclasses import dataclass
-
-from src.algorithms.balz_classification import (
-    BALZCategory, TierLevel, VOLUME_TIERS, LIQUIDITY_TIERS, 
-    MARKET_CAP_TIERS, FDV_TIERS, FDV_RATIO_TIERS, SUB_CATEGORIES
-)
-
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -71,14 +65,75 @@ class ReasoningEngine:
     """
     
     def __init__(self):
-        """Initialize the reasoning engine with tier definitions from algorithms"""
+        """Initialize the reasoning engine with tier definitions"""
         
-        self.volume_tiers = VOLUME_TIERS
-        self.liquidity_tiers = LIQUIDITY_TIERS
-        self.market_cap_tiers = MARKET_CAP_TIERS
-        self.fdv_tiers = FDV_TIERS
-        self.fdv_ratio_tiers = FDV_RATIO_TIERS
-        self.sub_categories = SUB_CATEGORIES
+        # Volume tiers (24h trading activity in USD)
+        self.volume_tiers = {
+            'ranges': [
+                (0, 1000),           # Dead
+                (1000, 10000),       # Struggling
+                (10000, 100000),     # Active
+                (100000, 1000000),   # Hot
+                (1000000, float('inf'))  # Explosive
+            ],
+            'labels': ['Dead', 'Struggling', 'Active', 'Hot', 'Explosive']
+        }
+        
+        # Liquidity tiers (DEX pool depth in USD)
+        self.liquidity_tiers = {
+            'ranges': [
+                (0, 25000),          # Risky
+                (25000, 100000),     # Thin
+                (100000, 300000),    # Decent
+                (300000, 1000000),   # Deep
+                (1000000, float('inf'))  # Prime
+            ],
+            'labels': ['Risky', 'Thin', 'Decent', 'Deep', 'Prime']
+        }
+        
+        # Market cap tiers (in USD)
+        self.market_cap_tiers = {
+            'ranges': [
+                (0, 100000),         # Nano
+                (100000, 1000000),   # Micro
+                (1000000, 10000000), # Small
+                (10000000, 100000000), # Mid
+                (100000000, float('inf'))  # Large
+            ],
+            'labels': ['Nano', 'Micro', 'Small', 'Mid', 'Large']
+        }
+        
+        # FDV tiers (Fully Diluted Valuation in USD)
+        self.fdv_tiers = {
+            'ranges': [
+                (0, 500000),         # Micro
+                (500000, 5000000),   # Small
+                (5000000, 50000000), # Medium
+                (50000000, 500000000), # Large
+                (500000000, float('inf'))  # Maxxed
+            ],
+            'labels': ['Micro', 'Small', 'Medium', 'Large', 'Maxxed']
+        }
+        
+        # FDV/MC ratio tiers (tokenomics health)
+        self.fdv_ratio_tiers = {
+            'ranges': [
+                (1.0, 1.5),          # Clean
+                (1.5, 3.0),          # Caution
+                (3.0, 7.0),          # Heavy
+                (7.0, 10.0),         # Bloated
+                (10.0, float('inf')) # Red Flag
+            ],
+            'labels': ['Clean', 'Caution', 'Heavy', 'Bloated', 'Red Flag']
+        }
+        
+        # Sub-category mappings for more specific classifications
+        self.sub_categories = {
+            BALZCategory.TRASH: ['Rug Setup', 'Exit Liquidity', 'Dead Project', 'Scam Alert'],
+            BALZCategory.RISKY: ['Degen Play', 'High Risk High Reward', 'Gamble Territory'],
+            BALZCategory.CAUTION: ['Mixed Signals', 'Needs Research', 'Watch Carefully'],
+            BALZCategory.OPPORTUNITY: ['Hidden Gem', 'Early Entry', 'Strong Fundamentals']
+        }
         
     def classify_token(self, token_data: Any) -> TokenClassification:
         """
@@ -178,7 +233,7 @@ class ReasoningEngine:
     def _calculate_fdv_ratio(self, fdv: float, market_cap: float) -> float:
         """Calculate FDV to Market Cap ratio"""
         if market_cap <= 0:
-            return float('inf')  # Infinite ratio for zero market cap
+            return 100.0  # Max ratio for zero market cap
         return fdv / market_cap
     
     def _determine_balz_category(self, volume_tier: str, 

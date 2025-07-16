@@ -70,7 +70,7 @@ class SocialData:
 
 
 class RateLimiter:
-    """Rate limiter with sliding window"""
+    """Advanced rate limiter with priority queue support"""
     
     def __init__(self, max_calls: int, time_window: int = 60):
         """
@@ -83,6 +83,8 @@ class RateLimiter:
         self.max_calls = max_calls
         self.time_window = time_window
         self.calls = deque()
+        self.priority_queue = asyncio.PriorityQueue()
+        self.semaphore = asyncio.Semaphore(max_calls)
         self._lock = asyncio.Lock()
         
     async def acquire(self, priority: int = 1):
@@ -90,8 +92,10 @@ class RateLimiter:
         Acquire permission to make an API call
         
         Args:
-            priority: Call priority (unused, kept for compatibility)
+            priority: Call priority (0 = highest, higher numbers = lower priority)
         """
+        await self.priority_queue.put((priority, time.time()))
+        
         async with self._lock:
             now = time.time()
             
@@ -125,32 +129,22 @@ class GeckoTerminalClient:
     
     BASE_URL = "https://api.geckoterminal.com/api/v2"
     
-    def __init__(self, api_key: Optional[str] = None, rate_limit: Optional[int] = None):
+    def __init__(self, api_key: Optional[str] = None, rate_limit: int = 500):
         """
         Initialize GeckoTerminal client
         
         Args:
             api_key: Optional API key for GeckoTerminal Pro
-            rate_limit: Calls per minute limit (defaults to settings value)
-                       
-        Pro Plan Features:
-        - 500,000 API calls per month
-        - 500 calls per minute rate limit  
-        - 60+ market data endpoints
-        - Exclusive data endpoints
-        - 10 years historical data
-        - Priority email support
+            rate_limit: Calls per minute limit
         """
-        from src.config.settings import settings
-        
-        self.api_key = api_key or settings.api.geckoterminal_api_key
-        self.rate_limiter = RateLimiter(rate_limit or settings.api.rate_limit, 60)
+        self.api_key = api_key
+        self.rate_limiter = RateLimiter(rate_limit, 60)
         self._cache = {}
         self._cache_ttl = 300  # 5 minutes
         
         # Setup headers
         self.headers = {
-            'Accept': 'application/json;version=20230302',
+            'Accept': 'application/json',
             'User-Agent': 'BIGBALZ-Bot/1.0'
         }
         
@@ -285,13 +279,8 @@ class GeckoTerminalClient:
                 return None
                 
             attrs = token_data.get('attributes', {})
-            relationships = token_data.get('relationships', {})
             
-            primary_pool_id = None
-            top_pools = relationships.get('top_pools', {}).get('data', [])
-            if top_pools:
-                primary_pool_id = top_pools[0].get('id')
-            
+            # Need to fetch included pool data for liquidity
             included = data.get('included', [])
             primary_pool = None
             
@@ -323,13 +312,6 @@ class GeckoTerminalClient:
             if liquidity == 0:
                 liquidity = safe_float(attrs.get('total_reserve_in_usd'))
             
-            clean_pool_address = None
-            if primary_pool_id:
-                if primary_pool_id.startswith(f"{network}_"):
-                    clean_pool_address = primary_pool_id[len(f"{network}_"):]
-                else:
-                    clean_pool_address = primary_pool_id
-
             return TokenData(
                 symbol=attrs.get('symbol', 'UNKNOWN'),
                 name=attrs.get('name', 'Unknown Token'),
@@ -345,7 +327,7 @@ class GeckoTerminalClient:
                 price_change_24h=safe_float(price_changes.get('h24')),
                 price_change_1h=safe_float(price_changes.get('h1')),
                 price_change_5m=safe_float(price_changes.get('m5')),
-                pool_address=clean_pool_address
+                pool_address=primary_pool.get('id') if primary_pool else None
             )
             
         except Exception as e:
@@ -431,102 +413,26 @@ class GeckoTerminalClient:
     async def get_trending_pools(self, network: str, duration: str = "5m", 
                                 limit: int = 20) -> Optional[List[Dict]]:
         """
-        Get trending pools for moonshot detection with token enrichment
+        Get trending pools for moonshot detection
         
         Args:
             network: Network identifier
-            duration: Time duration (5m, 1h, 6h, 24h)
+            duration: Time duration (5m, 1h, 24h) - not used in current API
             limit: Number of results
             
         Returns:
-            List of trending pool data with enriched token information
+            List of trending pool data
         """
         url = f"{self.BASE_URL}/networks/{network}/trending_pools"
-        url += f"?duration={duration}&limit={limit}&include=base_token,quote_token"
+        # Duration parameter is supported according to docs (5m, 1h, 6h, 24h)
+        url += f"?duration={duration}&limit={limit}"
         
-        data = await self._make_request(url, priority=3)
+        data = await self._make_request(url, priority=3)  # Lower priority
         
         if not data:
             return []
             
-        pools = data.get('data', [])
-        included = data.get('included', [])
-        
-        # Create token lookup from included data
-        token_lookup = {}
-        for item in included:
-            if item.get('type') == 'token':
-                token_lookup[item.get('id')] = item.get('attributes', {})
-        
-        # Extract token addresses for batch lookup
-        token_addresses = []
-        for pool in pools:
-            relationships = pool.get('relationships', {})
-            base_token_rel = relationships.get('base_token', {})
-            base_token_id = base_token_rel.get('data', {}).get('id')
-            if base_token_id:
-                address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
-                token_addresses.append(address)
-        
-        # Get complete token data via batch lookup
-        complete_token_data = await self.get_tokens_batch(network, token_addresses)
-        logger.info(f"Trending pools token enrichment: {len(complete_token_data)} tokens enriched from {len(token_addresses)} addresses")
-        
-        # Enrich pool data with complete token information
-        enriched_pools = []
-        for pool in pools:
-            relationships = pool.get('relationships', {})
-            base_token_rel = relationships.get('base_token', {})
-            base_token_id = base_token_rel.get('data', {}).get('id')
-            
-            enriched_pool = pool.copy()
-            original_attrs = enriched_pool.get('attributes', {})
-            enriched_attrs = original_attrs.copy()
-            
-            # Add network identifier to enriched attributes
-            enriched_attrs['network'] = network
-            
-            if base_token_id:
-                address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
-                complete_token = complete_token_data.get(address, {})
-                
-                if complete_token:
-                    enriched_attrs['base_token_symbol'] = complete_token.get('symbol', 'UNKNOWN')
-                    
-                    if not enriched_attrs.get('market_cap_usd'):
-                        api_market_cap = complete_token.get('market_cap_usd')
-                        if api_market_cap and api_market_cap != 0:
-                            enriched_attrs['market_cap_usd'] = api_market_cap
-                        else:
-                            price_usd = complete_token.get('price_usd')
-                            total_supply = complete_token.get('total_supply')
-                            
-                            if price_usd is not None and total_supply is not None:
-                                try:
-                                    price = float(price_usd)
-                                    supply = float(total_supply)
-                                    if price > 0 and supply > 0:
-                                        calculated_mcap = price * supply
-                                        enriched_attrs['market_cap_usd'] = str(calculated_mcap)
-                                        complete_token['market_cap_usd'] = str(calculated_mcap)
-                                except (ValueError, TypeError) as e:
-                                    logger.warning(f"Error calculating market cap for {complete_token.get('symbol', 'UNKNOWN')}: {e}")
-                    
-                    if not enriched_attrs.get('fdv_usd'):
-                        enriched_attrs['fdv_usd'] = complete_token.get('fdv_usd')
-                    
-                    enriched_pool['_token_data'] = complete_token
-                else:
-                    enriched_attrs['base_token_symbol'] = 'UNKNOWN'
-                    enriched_pool['_token_data'] = {}
-            else:
-                enriched_attrs['base_token_symbol'] = 'UNKNOWN'
-                enriched_pool['_token_data'] = {}
-            
-            enriched_pool['attributes'] = enriched_attrs
-            enriched_pools.append(enriched_pool)
-        
-        return enriched_pools[:limit]
+        return data.get('data', [])
         
     async def get_new_pools(self, network: str, limit: int = 20) -> Optional[List[Dict]]:
         """
@@ -539,6 +445,7 @@ class GeckoTerminalClient:
         Returns:
             List of new pool data
         """
+        # Correct endpoint path for GeckoTerminal API
         url = f"{self.BASE_URL}/networks/{network}/new_pools"
         url += f"?limit={limit}"
         
@@ -548,105 +455,6 @@ class GeckoTerminalClient:
             return []
             
         return data.get('data', [])
-    
-    async def get_new_pools_paginated(self, network: str, max_pools: int = 1000) -> List[Dict]:
-        """
-        Get newly created pools with pagination
-        
-        Args:
-            network: Network identifier
-            max_pools: Maximum pools to fetch (up to 1000)
-            
-        Returns:
-            List of new pool data with enriched token information
-        """
-        all_pools = []
-        for page in range(1, 11):
-            # Use network-specific endpoint with include parameter
-            url = f"{self.BASE_URL}/networks/{network}/new_pools?page={page}&include=base_token,quote_token"
-            data = await self._make_request(url, priority=3)
-            
-            if not data or not data.get('data'):
-                break
-                
-            pools = data.get('data', [])
-            included = data.get('included', [])
-            
-            token_lookup = {}
-            for item in included:
-                if item.get('type') == 'token':
-                    token_lookup[item.get('id')] = item.get('attributes', {})
-            
-            # Extract token addresses for batch lookup
-            token_addresses = []
-            for pool in pools:
-                relationships = pool.get('relationships', {})
-                base_token_rel = relationships.get('base_token', {})
-                base_token_id = base_token_rel.get('data', {}).get('id')
-                if base_token_id:
-                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
-                    token_addresses.append(address)
-            
-            complete_token_data = await self.get_tokens_batch(network, token_addresses)
-            logger.info(f"Batch token enrichment: {len(complete_token_data)} tokens enriched from {len(token_addresses)} addresses")
-            
-            # Enrich pool data with complete token information
-            enriched_pools = []
-            for pool in pools:
-                relationships = pool.get('relationships', {})
-                base_token_rel = relationships.get('base_token', {})
-                base_token_id = base_token_rel.get('data', {}).get('id')
-                
-                enriched_pool = pool.copy()
-                original_attrs = enriched_pool.get('attributes', {})
-                enriched_attrs = original_attrs.copy()
-                
-                # Add network identifier to enriched attributes
-                enriched_attrs['network'] = network
-                
-                if base_token_id:
-                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
-                    complete_token = complete_token_data.get(address, {})
-                    
-                    if complete_token:
-                        enriched_attrs['base_token_symbol'] = complete_token.get('symbol', 'UNKNOWN')
-                        
-                        api_market_cap = complete_token.get('market_cap_usd')
-                        if api_market_cap and api_market_cap != 0:
-                            enriched_attrs['market_cap_usd'] = api_market_cap
-                        else:
-                            price_usd = complete_token.get('price_usd')
-                            total_supply = complete_token.get('total_supply')
-                            
-                            if price_usd is not None and total_supply is not None:
-                                try:
-                                    price = float(price_usd)
-                                    supply = float(total_supply)
-                                    if price > 0 and supply > 0:
-                                        calculated_mcap = price * supply
-                                        enriched_attrs['market_cap_usd'] = str(calculated_mcap)
-                                        complete_token['market_cap_usd'] = str(calculated_mcap)
-                                except (ValueError, TypeError) as e:
-                                    logger.warning(f"Error calculating market cap for {complete_token.get('symbol', 'UNKNOWN')}: {e}")
-                        
-                        enriched_attrs['fdv_usd'] = complete_token.get('fdv_usd')
-                        enriched_pool['_token_data'] = complete_token
-                    else:
-                        enriched_attrs['base_token_symbol'] = 'UNKNOWN'
-                        enriched_pool['_token_data'] = {}
-                else:
-                    enriched_attrs['base_token_symbol'] = 'UNKNOWN'
-                    enriched_pool['_token_data'] = {}
-                
-                enriched_pool['attributes'] = enriched_attrs
-                enriched_pools.append(enriched_pool)
-            
-            all_pools.extend(enriched_pools)
-            
-            if len(all_pools) >= max_pools:
-                break
-        
-        return all_pools[:max_pools]
         
     async def get_pool_info(self, network: str, pool_address: str) -> Optional[Dict]:
         """
@@ -695,109 +503,6 @@ class GeckoTerminalClient:
             
         return data.get('data', [])
     
-    async def get_pools_paginated(self, network: str, sort: str = "h24_volume_usd_desc", 
-                                 max_pools: int = 1000) -> List[Dict]:
-        """
-        Get pools with pagination and sorting
-        
-        Args:
-            network: Network identifier
-            sort: Sort parameter
-            max_pools: Maximum pools to fetch
-            
-        Returns:
-            List of pool data with enriched token information
-        """
-        all_pools = []
-        for page in range(1, 11):
-            url = f"{self.BASE_URL}/networks/{network}/pools?sort={sort}&page={page}&include=base_token,quote_token"
-            data = await self._make_request(url, priority=3)
-            
-            if not data or not data.get('data'):
-                break
-                
-            pools = data.get('data', [])
-            included = data.get('included', [])
-            
-            token_lookup = {}
-            for item in included:
-                if item.get('type') == 'token':
-                    token_lookup[item.get('id')] = item.get('attributes', {})
-            
-            # Extract token addresses for batch lookup
-            token_addresses = []
-            for pool in pools:
-                relationships = pool.get('relationships', {})
-                base_token_rel = relationships.get('base_token', {})
-                base_token_id = base_token_rel.get('data', {}).get('id')
-                if base_token_id:
-                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
-                    token_addresses.append(address)
-            
-            complete_token_data = await self.get_tokens_batch(network, token_addresses)
-            logger.info(f"Batch token enrichment: {len(complete_token_data)} tokens enriched from {len(token_addresses)} addresses")
-            
-            # Enrich pool data with complete token information
-            enriched_pools = []
-            for pool in pools:
-                relationships = pool.get('relationships', {})
-                base_token_rel = relationships.get('base_token', {})
-                base_token_id = base_token_rel.get('data', {}).get('id')
-                
-                enriched_pool = pool.copy()
-                original_attrs = enriched_pool.get('attributes', {})
-                enriched_attrs = original_attrs.copy()
-                
-                # Add network identifier to enriched attributes
-                enriched_attrs['network'] = network
-                
-                if base_token_id:
-                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
-                    complete_token = complete_token_data.get(address, {})
-                    
-                    if complete_token:
-                        enriched_attrs['base_token_symbol'] = complete_token.get('symbol', 'UNKNOWN')
-                        
-                        if not enriched_attrs.get('market_cap_usd'):
-                            api_market_cap = complete_token.get('market_cap_usd')
-                            if api_market_cap and api_market_cap != 0:
-                                enriched_attrs['market_cap_usd'] = api_market_cap
-                            else:
-                                price_usd = complete_token.get('price_usd')
-                                total_supply = complete_token.get('total_supply')
-                                
-                                if price_usd is not None and total_supply is not None:
-                                    try:
-                                        price = float(price_usd)
-                                        supply = float(total_supply)
-                                        if price > 0 and supply > 0:
-                                            calculated_mcap = price * supply
-                                            enriched_attrs['market_cap_usd'] = str(calculated_mcap)
-                                            complete_token['market_cap_usd'] = str(calculated_mcap)
-                                    except (ValueError, TypeError) as e:
-                                        logger.warning(f"Error calculating market cap for {complete_token.get('symbol', 'UNKNOWN')}: {e}")
-                        
-                        if not enriched_attrs.get('fdv_usd'):
-                            enriched_attrs['fdv_usd'] = complete_token.get('fdv_usd')
-                        
-                        enriched_pool['_token_data'] = complete_token
-                    else:
-                        enriched_attrs['base_token_symbol'] = 'UNKNOWN'
-                        enriched_pool['_token_data'] = {}
-                else:
-                    enriched_attrs['base_token_symbol'] = 'UNKNOWN'
-                    enriched_pool['_token_data'] = {}
-                
-                enriched_pool['attributes'] = enriched_attrs
-                enriched_pools.append(enriched_pool)
-            
-            all_pools.extend(enriched_pools)
-            
-            if len(all_pools) >= max_pools:
-                break
-        
-        return all_pools[:max_pools]
-    
     async def get_pool_ohlcv(self, network: str, pool_address: str, 
                            timeframe: str = "day", aggregate: int = 1, 
                            limit: int = 7) -> Optional[List[Dict]]:
@@ -823,40 +528,6 @@ class GeckoTerminalClient:
             return []
             
         return data.get('data', {}).get('attributes', {}).get('ohlcv_list', [])
-    
-    async def get_tokens_batch(self, network: str, addresses: List[str]) -> Dict[str, Dict]:
-        """
-        Get complete token information for multiple addresses in batch
-        
-        Args:
-            network: Network identifier
-            addresses: List of token addresses (max 30 per request)
-            
-        Returns:
-            Dictionary mapping address to token attributes
-        """
-        if not addresses:
-            return {}
-        
-        token_data = {}
-        for i in range(0, len(addresses), 30):
-            batch = addresses[i:i+30]
-            addresses_str = ','.join(batch)
-            
-            url = f"{self.BASE_URL}/networks/{network}/tokens/multi/{addresses_str}"
-            data = await self._make_request(url, priority=2)
-            
-            if data and data.get('data'):
-                for token in data['data']:
-                    attrs = token.get('attributes', {})
-                    address = attrs.get('address')
-                    if address:
-                        logger.debug(f"Token {address}: market_cap_usd={attrs.get('market_cap_usd')}, total_supply={attrs.get('total_supply')}")
-                        token_data[address] = attrs
-            else:
-                logger.warning(f"No token data returned for batch: {addresses_str}")
-        
-        return token_data
     
     def get_rate_limit_status(self) -> Dict[str, Any]:
         """Get current rate limit status"""

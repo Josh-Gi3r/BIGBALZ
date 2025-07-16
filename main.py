@@ -153,8 +153,7 @@ async def initialize_components():
             button_handler=None,  # Will be set later
             session_manager=session_manager,
             conversation_handler=conversation_handler,
-            background_monitor=None,  # Will be set later
-            settings=settings
+            background_monitor=None  # Will be set later
         )
         
         # Initialize button handler with bot_handler reference
@@ -165,8 +164,7 @@ async def initialize_components():
             reasoning_engine=reasoning_engine,
             response_generator=response_generator,
             whale_tracker=whale_tracker,
-            bot_handler=bot_handler,
-            settings=settings
+            bot_handler=bot_handler
         )
         
         # Set cross-references
@@ -218,13 +216,7 @@ async def main():
         # Start session cleanup task
         await components['session_manager'].start_cleanup_task()
         
-        # Setup bot handlers FIRST
-        components['bot_handler'].setup()
-        
-        # Initialize the bot application
-        await components['bot_handler'].application.initialize()
-        await components['bot_handler'].application.start()
-        
+        # Start message auto-deletion task
         await components['bot_handler'].start_cleanup_task()
         
         # Start background monitoring (if enabled)
@@ -235,12 +227,17 @@ async def main():
             )
             logger.info("✅ Background monitoring tasks created successfully")
         
+        # Setup bot handlers
+        components['bot_handler'].setup()
+        
         # Start the bot
         logger.info("Starting Telegram bot...")
         logger.info("Bot is ready to receive messages!")
         logger.info("Press Ctrl+C to stop")
         
         # Run bot
+        await components['bot_handler'].application.initialize()
+        await components['bot_handler'].application.start()
         await components['bot_handler'].application.updater.start_polling(
             drop_pending_updates=True
         )

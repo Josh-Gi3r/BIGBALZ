@@ -1,373 +1,168 @@
-# 🚀 BIGBALZ Bot - Advanced Crypto Intelligence Platform
+# BIGBALZ Bot - Professional Crypto Trading Assistant
 
-*Professional-grade cryptocurrency analysis and market monitoring through Telegram*
+A sophisticated Telegram bot that provides real-time cryptocurrency analysis, automated market monitoring, and intelligent trading insights across multiple blockchain networks.
 
-[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
-[![Telegram](https://img.shields.io/badge/Telegram-Bot-blue.svg)](https://telegram.org)
-[![License](https://img.shields.io/badge/License-Private-red.svg)]()
+## Overview
 
----
+BIGBALZ Bot combines advanced market analysis with natural language processing to deliver institutional-grade crypto intelligence directly through Telegram. The bot operates 24/7, continuously monitoring markets for opportunities while providing comprehensive token analysis on demand.
 
-## 🎯 **What Makes BIGBALZ Different**
+## Core Capabilities
 
-BIGBALZ Bot combines institutional-level market analysis with real-time monitoring to deliver actionable crypto intelligence. Our proprietary detection algorithms and scoring systems provide edge that traditional tools can't match.
+### Real-Time Token Analysis
+- **Comprehensive Metrics**: Instant analysis of price, market cap, liquidity, volume, and trading activity
+- **BALZ Classification System**: Proprietary 4-tier ranking algorithm that evaluates tokens based on multiple risk factors
+- **Smart Contract Validation**: Multi-network contract verification with automatic network detection
+- **Whale Movement Tracking**: Monitor large holder activities and confidence scoring
 
-### 🔥 **Key Differentiators**
-- **Proprietary Algorithms**: Advanced detection systems not available elsewhere
-- **Real-Time Intelligence**: 60-second market scanning with instant alerts  
-- **Professional Grade**: Institutional-level analysis for retail users
-- **Multi-Network Coverage**: Comprehensive cross-chain monitoring
-- **AI-Enhanced**: GPT-4 powered natural language interface
-- **Risk-Focused**: Built-in protection against rugs and scams
+### Automated Market Surveillance
+- **Moonshot Detection**: Three-tier opportunity identification system (POTENTIAL 100X/10X/2X) with strict filtering criteria
+- **Rug Pull Monitoring**: Real-time detection of liquidity extraction and price manipulation events
+- **Continuous Scanning**: Markets monitored every 60 seconds across all supported networks
+- **Intelligent Alerts**: Automated notifications for significant market events with full contract details
 
----
+### Advanced Communication
+- **Natural Language Processing**: Powered by GPT-4 for intelligent, context-aware conversations
+- **Multi-Modal Interaction**: Supports both direct messages and group chat environments
+- **Smart Response System**: Contextual awareness with conversation history tracking
+- **Professional Interface**: Clean, formatted outputs with actionable insights
 
-## ⚡ **Core Features**
+### Gem Research Engine
+- **Custom Criteria Search**: Interactive 5-question flow for personalized gem discovery
+- **Multi-Parameter Filtering**: Network, age, liquidity, and market cap selection
+- **Smart Classification**: 8 distinct gem categories from DEGEN PLAY to SAFE BET
+- **FDV Analysis**: Automatic dilution risk assessment with circulating supply metrics
 
-### 🔍 **Intelligent Token Analysis**
-- **BALZ Classification System**: Proprietary 4-tier risk assessment (TRASH → OPPORTUNITY)
-- **Multi-Network Support**: Ethereum, Solana, Base, BNB Smart Chain
-- **Real-Time Metrics**: Price, liquidity, volume, market cap analysis
-- **Smart Contract Validation**: Automatic network detection and verification
+## Supported Networks
 
-### 🚀 **Advanced Moonshot Detection**
-- **Three-Tier Opportunity System**: POTENTIAL 100X/10X/2X classifications
-- **Continuous Market Scanning**: 60-second monitoring across all networks
-- **Strict Filtering Criteria**: Proprietary algorithms eliminate noise
-- **Instant Alerts**: Real-time notifications with actionable insights
+- **Ethereum** - Full ERC-20 token support
+- **Solana** - SPL token analysis
+- **BNB Smart Chain** - BSC token coverage
+- **Base** - L2 ecosystem integration
 
-### ⚠️ **Rug Pull Protection**
-- **Real-Time Monitoring**: Advanced liquidity drain detection
-- **Pattern Recognition**: Identifies suspicious trading behavior
-- **Early Warning System**: Alerts before major dumps
-- **Risk Assessment**: Confidence scoring for all alerts
+## Current Features
 
-### 🐋 **Whale Activity Tracking**
-- **Large Holder Analysis**: Monitor whale movements and confidence scoring
-- **Position Tracking**: Real-time whale distribution analysis
-- **Sentiment Analysis**: Buy/sell pressure from major holders
-- **Risk Evaluation**: Concentration risk assessment
+### Token Analysis Engine
+Drop any contract address to receive:
+- Real-time price and market data
+- Liquidity and volume analysis
+- BALZ risk classification
+- Social media presence verification
+- Interactive button navigation for deeper insights
 
-### 💎 **Custom Gem Research**
-- **Interactive Discovery**: 4-step personalized search flow
-- **8 Gem Categories**: From DEGEN PLAY to SAFE BET classifications
-- **Multi-Parameter Filtering**: Network, age, liquidity, market cap
-- **Token Symbol Enrichment**: Real token symbols instead of generic placeholders
-- **FDV Analysis**: Automatic dilution risk assessment
+### Market Opportunity Scanner
+Continuous monitoring for:
+- High-momentum tokens with strict liquidity requirements
+- Sudden price movements with volume confirmation
+- Pattern recognition across multiple timeframes
+- Risk-adjusted opportunity identification
 
-### 🤖 **AI-Powered Conversations**
-- **GPT-4 Integration**: Natural language understanding
-- **Context Awareness**: Remembers conversation history
-- **Professional Interface**: Clean, formatted responses
-- **Multi-Modal Support**: Works in DMs and group chats
+### Security Monitoring
+Real-time detection of:
+- Liquidity drainage events
+- Price crash events
+- Volume dump patterns
+- Coordinated selling and exit scams
 
----
+### Conversational Interface
+- Natural dialogue capabilities for market discussions
+- Intelligent query understanding
+- Context retention across conversations
+- Professional yet approachable communication style
 
-## 🌐 **Supported Networks**
+### Automated Message Management
+- Auto-deletion of all broadcast messages after 25 minutes
+- Clean chat experience with automatic cleanup
+- Applies to alerts, reports, and periodic messages
 
-| Network | Status | Features |
-|---------|--------|----------|
-| **Ethereum** | ✅ Active | Full ERC-20 support, DeFi integration |
-| **Solana** | ✅ Active | SPL tokens, high-speed monitoring |
-| **Base** | ✅ Active | L2 ecosystem, low-cost transactions |
-| **BNB Smart Chain** | ✅ Active | BSC tokens, yield farming integration |
+## Upcoming Features
 
----
+### Enhanced Analytics (In Development)
+- **Full Token Health Check**: Deep-dive analysis with expanded BALZ scoring metrics
+- **Social Sentiment Analysis**: Cross-platform sentiment tracking (Twitter, Discord, Telegram, Reddit)
+- **AI-Powered Chart Generation**: Visual market analysis and custom chart creation
 
-## 🚀 **Getting Started**
+### Advanced Trading Tools (Planned)
+- **Multi-Network Arbitrage Detection**: Identify cross-chain price inefficiencies
+- **Whale Trade Replication**: Mirror successful large trader strategies
+- **Flash Event Detection**: Microsecond-level unusual activity alerts
+- **Token Correlation Analysis**: Identify correlated asset movements
 
-### 📋 **Prerequisites**
-- Python 3.12+
-- Telegram Bot Token
-- GeckoTerminal Pro API Key (500 calls/minute)
-- OpenAI API Key
-- PostgreSQL Database
+### Portfolio Management (Future)
+- **Automated Position Tracking**: Real-time P&L across all holdings
+- **Risk Management Alerts**: Customizable stop-loss and take-profit notifications
+- **DCA Strategy Automation**: Dollar-cost averaging implementation
+- **Tax Optimization Reports**: Transaction history and tax liability tracking
 
-### ⚙️ **Installation**
+## Technical Specifications
 
-1. **Clone the repository:**
+### Architecture
+- **Language**: Python 3.9+
+- **Framework**: python-telegram-bot with asyncio
+- **AI Integration**: OpenAI GPT-4 API
+- **Data Source**: GeckoTerminal API with caching layer
+- **Deployment**: Railway-ready with environment configuration
+
+### Performance
+- **Response Time**: <2 seconds for standard queries
+- **Monitoring Frequency**: 60-second market scans
+- **Rate Limiting**: Intelligent request management
+- **Uptime Target**: 99.9% availability
+
+## Installation
+
+### Prerequisites
+- Python 3.9 or higher
+- Telegram Bot Token (obtain from @BotFather)
+- OpenAI API Key (for AI features)
+- GeckoTerminal API Key (optional, for enhanced features)
+
+### Quick Start
 ```bash
+# Clone repository
 git clone https://github.com/Josh-Gi3r/BIGBALZ.git
-cd BIGBALZ
-```
+cd "BIGBALZ BOT"
 
-2. **Create virtual environment:**
-```bash
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
 
-3. **Install dependencies:**
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-4. **Configure environment variables:**
-```bash
+# Configure environment
 cp .env.example .env
-# Edit .env with your credentials
-```
+# Edit .env with your API keys
 
-5. **Set up database:**
-```bash
-# Create PostgreSQL database
-# Update DATABASE_URL in .env
-```
-
-6. **Run the bot:**
-```bash
+# Launch bot
 python main.py
 ```
 
-### 🔧 **Environment Variables**
+## Configuration
 
-Create a `.env` file with the following variables:
-
-```env
-# Telegram Configuration
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-
-# GeckoTerminal Pro Plan Configuration
-GECKOTERMINAL_API_KEY=your_geckoterminal_pro_api_key_here
-API_RATE_LIMIT=500
-
-# OpenAI Configuration  
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/bigbalz
-
-# Monitoring Configuration
-MONITORING_INTERVAL=60
-MAX_CONCURRENT_REQUESTS=10
-
-# Logging Configuration
-LOG_LEVEL=INFO
-LOG_FILE=logs/bigbalz.log
+Create a `.env` file with the following parameters:
+```
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+OPENAI_API_KEY=your_openai_api_key
+GECKOTERMINAL_API_KEY=your_geckoterminal_key
+ENVIRONMENT=development
 ```
 
----
+## Deployment
 
-## 💬 **Usage**
+The bot is optimized for Railway deployment with included Procfile and runtime configuration. Simply connect your GitHub repository to Railway for automatic deployments.
 
-### 🎮 **Trigger Words**
+## Risk Disclaimer
 
-**Moonshot Detection:**
-- "moonshot", "moonshots", "gem", "gems", "moon", "gains", "pumping", "mooning"
+This bot provides market data and analysis for informational purposes only. Cryptocurrency trading carries substantial risk of loss. Users should conduct their own research and never invest more than they can afford to lose. The bot's analysis should not be considered financial advice.
 
-**Custom Research:**
-- "research", "find", "look for", "search", "scan for", "help me find", "explore", "discover"
+## Support
 
-**Combined Triggers:**
-- "research gems", "find gems", "look for moonshots", "search tokens"
+For technical issues, feature requests, or general inquiries, please open an issue on the GitHub repository.
 
-### 📱 **Example Conversations**
-
-```
-User: "Show me recent moonshots"
-Bot: [Displays recent POTENTIAL 100X/10X/2X detections with analysis]
-
-User: "Research gems on Solana under $1M market cap"
-Bot: [Starts interactive 4-step gem discovery flow]
-
-User: "0x1234...abcd"
-Bot: [Provides comprehensive token analysis with BALZ classification]
-```
-
-### 🔍 **Interactive Gem Research Flow**
-
-1. **Network Selection**: Choose blockchain (Ethereum, Solana, Base, BSC)
-2. **Age Preference**: Fresh launches (48h) vs Established (2+ days)
-3. **Liquidity Range**: $10K-$50K, $50K-$250K, $250K-$1M, $1M+
-4. **Market Cap Target**: Micro (<$1M), Small ($1M-$10M), Mid ($10M-$50M)
-
----
-
-## 🏗️ **Architecture**
-
-### 📁 **Project Structure**
-```
-BIGBALZ/
-├── src/
-│   ├── api/                 # External API clients
-│   │   ├── geckoterminal_client.py
-│   │   └── whale_tracker.py
-│   ├── bot/                 # Telegram bot handlers
-│   │   ├── telegram_handler.py
-│   │   ├── button_handler.py
-│   │   ├── gem_research_handler.py
-│   │   └── message_formatter.py
-│   ├── classification/      # Token analysis engine
-│   │   ├── reasoning_engine.py
-│   │   └── response_generator.py
-│   ├── config/             # Configuration management
-│   │   └── settings.py
-│   ├── database/           # Data persistence
-│   │   └── session_manager.py
-│   ├── monitoring/         # Background monitoring
-│   │   └── background_monitor.py
-│   └── utils/              # Utility functions
-│       ├── network_detector.py
-│       └── validators.py
-├── tests/                  # Comprehensive test suite
-│   ├── unit/              # Unit tests
-│   ├── integration/       # Integration tests
-│   └── fixtures/          # Test data
-├── main.py                # Application entry point
-└── requirements.txt       # Python dependencies
-```
-
-### 🔄 **Core Components**
-
-- **GeckoTerminal API Client**: Real-time market data integration
-- **Background Monitor**: Continuous market scanning and alert generation
-- **Reasoning Engine**: BALZ classification and risk assessment
-- **Telegram Handler**: User interaction and message processing
-- **Session Manager**: User state and conversation context
-- **Whale Tracker**: Large holder analysis and confidence scoring
-
----
-
-## 🔮 **Coming Soon**
-
-### 📊 **Enhanced Analytics Suite**
-- **Advanced BALZ Scoring**: Expanded proprietary metrics
-- **Social Sentiment Engine**: Cross-platform sentiment tracking
-- **AI Chart Generation**: Custom visual analysis tools
-- **Correlation Matrix**: Multi-token relationship analysis
-
-### ⚡ **Professional Trading Tools**
-- **Multi-Network Arbitrage**: Cross-chain opportunity detection
-- **Flash Event Alerts**: Microsecond-level unusual activity monitoring
-- **Whale Trade Replication**: Mirror successful large trader strategies
-- **Portfolio Integration**: Real-time P&L tracking
-
-### 🎯 **Advanced Features**
-- **Private BalzBack Applications**: Exclusive project submission system
-- **Shill Detection & Rewards**: Social engagement tracking
-- **Risk Management Suite**: Automated stop-loss and take-profit alerts
-- **Tax Optimization**: Transaction history and liability tracking
-
----
-
-## 🧪 **Testing**
-
-### 🔬 **Run Tests**
-```bash
-# Run all tests
-pytest tests/
-
-# Run specific test category
-pytest tests/unit/api/
-pytest tests/integration/
-
-# Run with coverage
-pytest tests/ --cov=src/ --cov-report=html
-```
-
-### 📋 **Test Categories**
-- **Unit Tests**: Individual component testing
-- **Integration Tests**: End-to-end flow validation
-- **API Tests**: External service integration
-- **Bot Tests**: Telegram interaction testing
-
----
-
-## 🤝 **Contributing**
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### 🔧 **Development Setup**
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-### 📝 **Code Standards**
-- Follow PEP 8 style guidelines
-- Add docstrings to all functions
-- Include type hints
-- Write comprehensive tests
-- Update documentation
-
----
-
-## 📊 **Performance & Reliability**
-
-### ⚡ **Performance Metrics**
-- **Response Time**: <3 seconds average (Pro plan optimized)
-- **API Rate Limit**: 500 calls/minute (GeckoTerminal Pro plan)
-- **Uptime**: 99.9% availability target
-- **Throughput**: 1000+ requests/minute
-- **Accuracy**: 95%+ detection precision
-
-### 🛡️ **Security Features**
-- **Rate Limiting**: API abuse prevention
-- **Input Validation**: Malicious input protection
-- **Error Handling**: Graceful failure recovery
-- **Logging**: Comprehensive audit trails
-
----
-
-## ⚠️ **Risk Disclaimer**
-
-BIGBALZ Bot provides market analysis for informational purposes only. Cryptocurrency trading involves substantial risk of loss. Our proprietary algorithms and scoring systems are designed to identify opportunities and risks, but should not be considered financial advice. 
-
-**Important Warnings:**
-- Always conduct your own research (DYOR)
-- Never invest more than you can afford to lose
-- Past performance does not guarantee future results
-- Market conditions can change rapidly
-- Smart contract risks and rug pulls are always possible
-
----
-
-## 📞 **Support & Community**
-
-### 🆘 **Getting Help**
-- **Documentation**: Check this README and code comments
-- **Issues**: Report bugs via GitHub Issues
-- **Discussions**: Join community discussions
-- **Contact**: Reach out to maintainers
-
-### 🌟 **Stay Updated**
-- **GitHub**: Watch this repository for updates
-- **Telegram**: Join our community channel
-- **Twitter**: Follow for announcements
-
----
-
-## 📄 **License**
+## License
 
 This project is proprietary software. All rights reserved.
 
-**Copyright © 2025 BIGBALZ Team**
-
-Unauthorized copying, distribution, or modification of this software is strictly prohibited.
-
 ---
-
-## 🙏 **Acknowledgments**
-
-- **GeckoTerminal**: Real-time market data provider
-- **OpenAI**: GPT-4 integration for natural language processing
-- **Telegram**: Bot platform and API
-- **Python Community**: Amazing libraries and frameworks
-
----
-
-<div align="center">
-
-**🚀 Ready to experience professional-grade crypto intelligence?**
-
-**Start a conversation with BIGBALZ Bot on Telegram and discover what institutional-level analysis can do for your trading.**
 
 *Professional crypto intelligence, delivered through Telegram.*
-
----
-
-⭐ **Star this repository if you find it valuable!** ⭐
-
-</div>

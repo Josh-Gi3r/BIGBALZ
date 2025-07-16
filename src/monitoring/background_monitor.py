@@ -12,17 +12,6 @@ from collections import defaultdict
 import time
 import random
 
-from src.api.geckoterminal_client import GeckoTerminalClient
-from src.bot.telegram_handler import TelegramBotHandler
-from src.algorithms.moonshot_criteria import MOONSHOT_CRITERIA_LIST, TIER_CONFIG
-from src.algorithms.rug_detection import (
-    RUG_LIQUIDITY_DRAIN_CRITERIA, 
-    RUG_PRICE_CRASH_CRITERIA, 
-    RUG_VOLUME_DUMP_CRITERIA,
-    MAX_HISTORICAL_DATA_AGE
-)
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +36,7 @@ class MoonshotAlert:
     token_symbol: str
     contract: str
     network: str
-    tier: str  # "POTENTIAL 100X", "POTENTIAL 10X", "POTENTIAL 2X"
+    tier: str  # "100x", "10x", "2x"
     price_change_percent: float
     volume_24h: float
     liquidity: float
@@ -421,8 +410,8 @@ class BackgroundMonitor:
         if not historical_record:
             return None
             
-        # Skip if the data is too old (more than threshold seconds)
-        if current_time - historical_record['timestamp'] > MAX_HISTORICAL_DATA_AGE:
+        # Skip if the data is too old (more than 120 seconds)
+        if current_time - historical_record['timestamp'] > 120:
             return None
         
         # Calculate changes
@@ -444,11 +433,10 @@ class BackgroundMonitor:
         
         # Check rug criteria in order: Liquidity → Price → Volume
         
-        # 1. LIQUIDITY DRAIN: Check against criteria
-        liquidity_criteria = RUG_LIQUIDITY_DRAIN_CRITERIA
-        if (liquidity_change >= liquidity_criteria['min_liquidity_drop_percent'] and 
-            historical_record['liquidity'] >= liquidity_criteria['min_initial_liquidity'] and 
-            current_liquidity < liquidity_criteria['max_final_liquidity']):
+        # 1. LIQUIDITY DRAIN: 40%+ drop with >$10k initial liquidity AND final liquidity <$1k
+        if (liquidity_change >= 40 and 
+            historical_record['liquidity'] >= 10000 and 
+            current_liquidity < 1000):
             logger.info(f"RUG DETECTED (LIQUIDITY_DRAIN): {current_data['symbol']} - {liquidity_change:.1f}% liquidity drop, final liquidity: ${current_liquidity:.0f}")
             return RugAlert(
                 token_symbol=current_data['symbol'],
@@ -460,12 +448,11 @@ class BackgroundMonitor:
                 final_liquidity=current_liquidity,
                 final_volume_1h=current_volume_1h,
                 timestamp=datetime.utcnow(),
-                rug_type=liquidity_criteria['rug_type']
+                rug_type="LIQUIDITY_DRAIN"
             )
         
-        # 2. PRICE CRASH: Check against criteria
-        price_criteria = RUG_PRICE_CRASH_CRITERIA
-        if price_change >= price_criteria['min_price_drop_percent']:
+        # 2. PRICE CRASH: 60%+ price drop
+        if price_change >= 60:
             logger.info(f"RUG DETECTED (PRICE_CRASH): {current_data['symbol']} - {price_change:.1f}% price drop")
             return RugAlert(
                 token_symbol=current_data['symbol'],
@@ -477,14 +464,12 @@ class BackgroundMonitor:
                 final_liquidity=current_liquidity,
                 final_volume_1h=current_volume_1h,
                 timestamp=datetime.utcnow(),
-                rug_type=price_criteria['rug_type']
+                rug_type="PRICE_CRASH"
             )
         
-        # 3. VOLUME DUMP: Check against criteria
-        volume_criteria = RUG_VOLUME_DUMP_CRITERIA
-        if (volume_change >= volume_criteria['min_volume_spike_percent'] and 
-            price_change >= volume_criteria['min_price_drop_percent'] and 
-            historical_volume_1h >= volume_criteria['min_previous_volume']):
+        # 3. VOLUME DUMP: 500%+ volume spike AND 50%+ price drop with >$1k previous volume
+        if (volume_change >= 500 and price_change >= 50 and 
+            historical_volume_1h >= 1000):
             logger.info(f"RUG DETECTED (VOLUME_DUMP): {current_data['symbol']} - {volume_change:.1f}% volume spike, {price_change:.1f}% price drop")
             return RugAlert(
                 token_symbol=current_data['symbol'],
@@ -496,37 +481,38 @@ class BackgroundMonitor:
                 final_liquidity=current_liquidity,
                 final_volume_1h=current_volume_1h,
                 timestamp=datetime.utcnow(),
-                rug_type=volume_criteria['rug_type']
+                rug_type="VOLUME_DUMP"
             )
         
         return None
     
     async def _broadcast_rug_alert(self, alert: RugAlert, network: str):
         """Broadcast rug pull alert"""
-        try:
-            alert.network = network
-            logger.info(f"💀 Broadcasting rug alert for {alert.token_symbol} on {alert.network}")
-            
-            # Format message
-            message = self._format_rug_message(alert)
-            
-            # Create buttons for rug alert with proper contract/network info
-            from src.bot.button_handler import ButtonHandler
-            button_handler = ButtonHandler(None, None, None, None)
-            buttons = button_handler.create_moonshot_buttons(alert.contract, alert.network)
-            
-            # Broadcast to all active chats with buttons
-            alert_context = {
-                'type': 'rug',
-                'contract': alert.contract,
-                'network': alert.network,
-                'symbol': alert.token_symbol
-            }
-            await self.bot_handler.broadcast_alert(message, buttons, alert_context)
-            logger.info(f"✅ Rug alert broadcast completed for {alert.token_symbol}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error broadcasting rug alert: {e}")
+        alert.network = network
+        
+        # Format message
+        message = self._format_rug_message(alert)
+        
+        # Create buttons for rug alert (same as moonshot)
+        # Just create the button markup directly without needing the handler
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        
+        # Log button data
+        logger.info(f"Creating rug alert buttons - network: '{alert.network}', contract: '{alert.contract}'")
+        
+        buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📊 Token Details", callback_data=f"alert_analyze_{alert.network}_{alert.contract}"),
+                InlineKeyboardButton("📱 Socials", callback_data=f"alert_socials_{alert.network}_{alert.contract}")
+            ],
+            [
+                InlineKeyboardButton("🐋 Whale Tracker", callback_data=f"alert_whale_{alert.network}_{alert.contract}"),
+                InlineKeyboardButton("⚖️ BALZ Rank", callback_data=f"alert_balz_{alert.network}_{alert.contract}")
+            ]
+        ])
+        
+        # Broadcast to all active chats with buttons
+        await self.bot_handler.broadcast_alert(message, buttons)
     
     def _format_rug_message(self, alert: RugAlert) -> str:
         """Format rug pull alert message"""
@@ -687,16 +673,11 @@ class BackgroundMonitor:
         cutoff_time = time.time() - (minutes * 60)
         counts = {'POTENTIAL 100X': 0, 'POTENTIAL 10X': 0, 'POTENTIAL 2X': 0}
         
-        logger.debug(f"Counting moonshots since {cutoff_time}. Total stored: {len(self.detected_moonshots)}")
-        
         for contract, moonshot_alert in self.detected_moonshots.items():
-            logger.debug(f"Checking moonshot {contract}: tier={moonshot_alert.tier}, timestamp={moonshot_alert.timestamp}")
             if moonshot_alert.timestamp.timestamp() >= cutoff_time:
                 if moonshot_alert.tier in counts:
                     counts[moonshot_alert.tier] += 1
-                    logger.debug(f"Counted moonshot {contract} in tier {moonshot_alert.tier}")
         
-        logger.debug(f"Final moonshot counts: {counts}")
         return counts
     
     def _count_recent_rugs(self, minutes: int) -> int:
@@ -969,59 +950,81 @@ class BackgroundMonitor:
                 best_price_change = change
                 best_timeframe = timeframe
         
-        # Check moonshot criteria using algorithm definitions
-        for criteria in MOONSHOT_CRITERIA_LIST:
-            if (liquidity >= criteria['min_liquidity'] and 
-                best_price_change >= criteria['min_price_change'] and 
-                volume_24h >= criteria['min_volume_24h'] and 
-                tx_count_24h >= criteria['min_tx_count_24h'] and
-                market_cap >= criteria['min_market_cap']):
-                
-                logger.info(f"{criteria['tier']} MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-                alert = MoonshotAlert(
-                    token_symbol=token_symbol,
-                    contract=contract,
-                    network=network,
-                    tier=criteria['tier'],
-                    price_change_percent=best_price_change,
-                    volume_24h=volume_24h,
-                    liquidity=liquidity,
-                    transaction_count=tx_count_24h,
-                    timestamp=datetime.utcnow()
-                )
-                logger.debug(f"Created {criteria['tier']} moonshot alert for {contract} at {alert.timestamp}")
-                return alert
+        # STRICTER Moonshot Criteria - Check against all timeframes
+        # 100x Moonshot: $10k+ liquidity, +75% in ANY timeframe, $15k+ volume, 75+ txs, $50k+ market cap
+        if (liquidity >= 10000 and best_price_change >= 75 and 
+            volume_24h >= 15000 and tx_count_24h >= 75 and
+            market_cap >= 50000):
+            logger.info(f"POTENTIAL 100X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
+            return MoonshotAlert(
+                token_symbol=token_symbol,
+                contract=contract,
+                network=network,
+                tier="POTENTIAL 100X",
+                price_change_percent=best_price_change,
+                volume_24h=volume_24h,
+                liquidity=liquidity,
+                transaction_count=tx_count_24h,
+                timestamp=datetime.utcnow()
+            )
+        
+        # 10x Moonshot: $20k+ liquidity, +30% in ANY timeframe, $30k+ volume, 100+ txs, $100k+ market cap
+        elif (liquidity >= 20000 and best_price_change >= 30 and 
+              volume_24h >= 30000 and tx_count_24h >= 100 and
+              market_cap >= 100000):
+            logger.info(f"POTENTIAL 10X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
+            return MoonshotAlert(
+                token_symbol=token_symbol,
+                contract=contract,
+                network=network,
+                tier="POTENTIAL 10X",
+                price_change_percent=best_price_change,
+                volume_24h=volume_24h,
+                liquidity=liquidity,
+                transaction_count=tx_count_24h,
+                timestamp=datetime.utcnow()
+            )
+        
+        # 2x Moonshot: $75k+ liquidity, +20% in ANY timeframe, $75k+ volume, 150+ txs, $500k+ market cap
+        elif (liquidity >= 75000 and best_price_change >= 20 and 
+              volume_24h >= 75000 and tx_count_24h >= 150 and
+              market_cap >= 500000):
+            logger.info(f"POTENTIAL 2X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
+            return MoonshotAlert(
+                token_symbol=token_symbol,
+                contract=contract,
+                network=network,
+                tier="POTENTIAL 2X",
+                price_change_percent=best_price_change,
+                volume_24h=volume_24h,
+                liquidity=liquidity,
+                transaction_count=tx_count_24h,
+                timestamp=datetime.utcnow()
+            )
         
         return None
     
     async def _broadcast_moonshot_alert(self, alert: MoonshotAlert):
         """Broadcast moonshot alert with buttons"""
-        try:
-            logger.info(f"🚀 Broadcasting moonshot alert for {alert.token_symbol} on {alert.network}")
-            
-            self.detected_moonshots[alert.contract] = alert
-            logger.debug(f"Stored moonshot alert for {alert.contract} in detected_moonshots. Total: {len(self.detected_moonshots)}")
-            
-            # Format message
-            message = self._format_moonshot_message(alert)
-            
-            # Create buttons for moonshot alert with proper contract/network info
-            from src.bot.button_handler import ButtonHandler
-            button_handler = ButtonHandler(None, None, None, None)
-            buttons = button_handler.create_moonshot_buttons(alert.contract, alert.network)
-            
-            # Broadcast to all active chats
-            alert_context = {
-                'type': 'moonshot',
-                'contract': alert.contract,
-                'network': alert.network,
-                'symbol': alert.token_symbol
-            }
-            await self.bot_handler.broadcast_alert(message, buttons, alert_context)
-            logger.info(f"✅ Moonshot alert broadcast completed for {alert.token_symbol}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error broadcasting moonshot alert: {e}")
+        # Format message
+        message = self._format_moonshot_message(alert)
+        
+        # Create buttons for moonshot alert
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        
+        buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📊 Token Details", callback_data=f"alert_analyze_{alert.network}_{alert.contract}"),
+                InlineKeyboardButton("📱 Socials", callback_data=f"alert_socials_{alert.network}_{alert.contract}")
+            ],
+            [
+                InlineKeyboardButton("🐋 Whale Tracker", callback_data=f"alert_whale_{alert.network}_{alert.contract}"),
+                InlineKeyboardButton("⚖️ BALZ Rank", callback_data=f"alert_balz_{alert.network}_{alert.contract}")
+            ]
+        ])
+        
+        # Broadcast to all active chats
+        await self.bot_handler.broadcast_alert(message, buttons)
     
     def _format_moonshot_message(self, alert: MoonshotAlert) -> str:
         """Format moonshot alert message"""
@@ -1033,7 +1036,14 @@ class BackgroundMonitor:
         }
         network_display = network_names.get(alert.network, alert.network.upper())
         
-        config = TIER_CONFIG.get(alert.tier, {"emoji": "🚀", "timeframe": "5m"})
+        # Tier-specific config
+        tier_config = {
+            "100x": {"emoji": "🚀", "timeframe": "5m"},
+            "10x": {"emoji": "⚡", "timeframe": "1h"},
+            "2x": {"emoji": "💰", "timeframe": "24h"}
+        }
+        
+        config = tier_config[alert.tier]
         
         # Get random savage line
         savage_lines = [

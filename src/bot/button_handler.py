@@ -3,17 +3,15 @@ Button Handler with Terminal State Design
 Manages all button interactions and enforces terminal states
 """
 
-import asyncio
 import logging
 from typing import Optional, Dict, Any
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from src.classification.reasoning_engine import ReasoningEngine
-from src.classification.response_generator import ResponseGenerator
-from src.api.whale_tracker import WhaleTracker
-from src.database.session_manager import SessionState
-from src.bot.gem_research_handler import GemCriteria
+from ..classification.reasoning_engine import ReasoningEngine
+from ..classification.response_generator import ResponseGenerator
+from ..api.whale_tracker import WhaleTracker
+from ..database.session_manager import SessionState
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ class ButtonHandler:
     """
     
     def __init__(self, api_client, session_manager, reasoning_engine=None, 
-                 response_generator=None, whale_tracker=None, bot_handler=None, settings=None):
+                 response_generator=None, whale_tracker=None, bot_handler=None):
         """
         Initialize button handler
         
@@ -36,7 +34,6 @@ class ButtonHandler:
             response_generator: Response generator for BALZ
             whale_tracker: Whale analysis system
             bot_handler: Reference to telegram bot handler
-            settings: Application settings configuration
         """
         self.api_client = api_client
         self.session_manager = session_manager
@@ -44,58 +41,14 @@ class ButtonHandler:
         self.response_generator = response_generator
         self.whale_tracker = whale_tracker
         self.bot_handler = bot_handler
-        self.settings = settings
         
         # Button callback patterns
         self.BUTTON_CALLBACKS = {
             'socials': self.handle_socials_button,
             'balz_rank': self.handle_balz_button,
             'whale_tracker': self.handle_whale_button,
-            'refresh_price': self.handle_refresh_button,
-            'alert_analyze': self.handle_alert_analyze_button,
-            'alert_socials': self.handle_alert_socials_button,
-            'alert_whale': self.handle_alert_whale_button,
-            'alert_balz': self.handle_alert_balz_button,
-            'back_to_alert': self.handle_back_to_alert_button
+            'refresh_price': self.handle_refresh_button
         }
-        
-    def _get_moonshot_token_data(self, contract: str, network: str, symbol: str):
-        """
-        Get rich token data from moonshot alert if available, otherwise return None
-        
-        Args:
-            contract: Token contract address
-            network: Network identifier
-            symbol: Token symbol from alert context
-            
-        Returns:
-            TokenData object with rich moonshot data or None if not available
-        """
-        if not self.bot_handler or not self.bot_handler.background_monitor:
-            return None
-            
-        moonshot_alert = self.bot_handler.background_monitor.detected_moonshots.get(contract)
-        if not moonshot_alert:
-            return None
-            
-        from src.api.geckoterminal_client import TokenData
-        return TokenData(
-            symbol=moonshot_alert.token_symbol,
-            name=moonshot_alert.token_symbol,
-            contract_address=contract,
-            network=network,
-            price_usd=0.0,
-            market_cap_usd=0.0,
-            fdv_usd=0.0,
-            volume_24h=moonshot_alert.volume_24h,
-            total_supply="0",
-            liquidity_usd=moonshot_alert.liquidity,
-            primary_dex="Unknown",
-            price_change_24h=moonshot_alert.price_change_percent,
-            price_change_1h=0.0,
-            price_change_5m=0.0,
-            pool_address=None
-        )
         
     async def _schedule_message_deletion(self, chat_id: int, message_id: int, deletion_time: int):
         """Schedule message deletion through bot handler"""
@@ -225,14 +178,7 @@ class ButtonHandler:
             context: Callback context
         """
         query = update.callback_query
-        
-        try:
-            await query.answer()  # Acknowledge the button press
-        except Exception as e:
-            if "too old" in str(e).lower() or "timeout" in str(e).lower():
-                logger.warning(f"Callback query timeout: {e}")
-            else:
-                raise e
+        await query.answer()  # Acknowledge the button press
         
         callback_data = query.data
         chat_id = query.message.chat_id
@@ -240,8 +186,9 @@ class ButtonHandler:
         
         # Check if this is a private chat
         if query.message.chat.type == 'private':
+            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in self.settings.allowed_dm_users:
+            if user_id not in ALLOWED_DM_USERS:
                 await query.message.reply_text(
                     "clicking buttons in my DMs? that's weird bro\n\njoin @MUSKYBALZAC if you wanna play with buttons"
                 )
@@ -251,46 +198,7 @@ class ButtonHandler:
         
         # Handle alert buttons (from moonshot/rug alerts)
         if callback_data.startswith('alert_'):
-            parts = callback_data.split('_')
-            if len(parts) >= 4:
-                action = parts[1]  # analyze, socials, whale, balz
-                network = parts[2]
-                contract = '_'.join(parts[3:])
-                
-                session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
-                if not session:
-                    session = self.session_manager.create_session(
-                        chat_id=chat_id,
-                        user_id=0,
-                        token_name="Alert Token",
-                        contract=contract,
-                        network=network,
-                        token_data={}
-                    )
-                
-                session.alert_context = {
-                    'contract': contract,
-                    'network': network,
-                    'symbol': 'Alert Token'  # Will be updated when token data is fetched
-                }
-                
-                # Route to appropriate alert handler
-                if action == 'analyze':
-                    await self.handle_alert_analyze_button(query, callback_data)
-                elif action == 'socials':
-                    await self.handle_alert_socials_button(query, callback_data)
-                elif action == 'whale':
-                    await self.handle_alert_whale_button(query, callback_data)
-                elif action == 'balz':
-                    await self.handle_alert_balz_button(query, callback_data)
-                else:
-                    await query.edit_message_text("❌ Unknown alert action.")
-                    deletion_time = 25 * 60
-                    await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
-            else:
-                await query.edit_message_text("❌ Invalid alert button data.")
-                deletion_time = 25 * 60
-                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
+            await self._handle_alert_button(query, callback_data)
             return
         
         # Handle back to alert button
@@ -303,40 +211,37 @@ class ButtonHandler:
             await self._handle_gem_choice(query, callback_data)
             return
         elif callback_data.startswith('gem_network_'):
-            await self._handle_gem_network_selection(query, context, callback_data)
+            await self._handle_gem_network_selection(query, callback_data)
             return
         elif callback_data.startswith('gem_age_'):
-            await self._handle_gem_age_selection(query, context, callback_data)
+            await self._handle_gem_age_selection(query, callback_data)
             return
         elif callback_data.startswith('gem_liq_'):
-            await self._handle_gem_liquidity_selection(query, context, callback_data)
+            await self._handle_gem_liquidity_selection(query, callback_data)
             return
         elif callback_data.startswith('gem_mcap_'):
-            await self._handle_gem_mcap_selection(query, context, callback_data)
+            await self._handle_gem_mcap_selection(query, callback_data)
             return
         elif callback_data.startswith('gem_analyze_'):
-            await self._handle_gem_analyze(query, context, callback_data)
+            await self._handle_gem_analyze(query, callback_data)
             return
         elif callback_data.startswith('gem_socials_'):
-            await self._handle_gem_socials(query, context, callback_data)
+            await self._handle_gem_socials(query, callback_data)
             return
         elif callback_data.startswith('gem_whale_'):
-            await self._handle_gem_whale(query, context, callback_data)
+            await self._handle_gem_whale(query, callback_data)
             return
         elif callback_data.startswith('gem_balz_'):
-            await self._handle_gem_balz(query, context, callback_data)
+            await self._handle_gem_balz(query, callback_data)
             return
         elif callback_data.startswith('gem_next_'):
-            await self._handle_gem_navigation(query, context, callback_data, 'next')
+            await self._handle_gem_navigation(query, callback_data, 'next')
             return
         elif callback_data.startswith('gem_back_'):
-            await self._handle_gem_navigation(query, context, callback_data, 'back')
+            await self._handle_gem_navigation(query, callback_data, 'back')
             return
         elif callback_data.startswith('back_to_gem_'):
-            await self._handle_back_to_gem(query, context, callback_data)
-            return
-        elif callback_data == 'gem_auto_search':
-            await self._handle_gem_auto_search(query, context, callback_data)
+            await self._handle_back_to_gem(query, callback_data)
             return
         
         # Handle moonshot/rug navigation
@@ -366,8 +271,6 @@ class ButtonHandler:
                 "⏰ Session expired. Please send a new contract address.",
                 parse_mode='Markdown'
             )
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             return
         
         # Route to appropriate handler
@@ -381,12 +284,8 @@ class ButtonHandler:
                     "❌ An error occurred. Please try again.",
                     parse_mode='Markdown'
                 )
-                deletion_time = 25 * 60
-                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
         else:
             await query.edit_message_text("Unknown button action.")
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def handle_socials_button(self, query, session: SessionState):
         """
@@ -413,8 +312,6 @@ class ButtonHandler:
                     parse_mode='Markdown',
                     disable_web_page_preview=True
                 )
-                deletion_time = 25 * 60
-                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             else:
                 buttons = self.create_main_buttons(hide_button='socials', show_back=True)
                 await query.edit_message_text(
@@ -428,16 +325,12 @@ class ButtonHandler:
                     reply_markup=buttons,
                     parse_mode='Markdown'
                 )
-                deletion_time = 25 * 60
-                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
         except Exception as e:
             logger.error(f"Error fetching social data: {e}")
             await query.edit_message_text(
                 "❌ Error fetching social data. Please try again later.",
                 parse_mode='Markdown'
             )
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def handle_balz_button(self, query, session: SessionState):
         """
@@ -457,8 +350,8 @@ class ButtonHandler:
                 )
                 return
             
-            # Handle token data for classification
-            from src.api.geckoterminal_client import TokenData
+            # Reconstruct TokenData object from dict if needed
+            from ..api.geckoterminal_client import TokenData
             if isinstance(token_data, dict):
                 # Create TokenData from dict
                 token_obj = TokenData(
@@ -478,10 +371,10 @@ class ButtonHandler:
                     price_change_5m=token_data.get('price_change_5m', 0),
                     pool_address=token_data.get('pool_address')
                 )
-                classification = self.reasoning_engine.classify_token(token_obj)
-            else:
-                # token_data is already a TokenData object, use it directly
-                classification = self.reasoning_engine.classify_token(token_data)
+                token_data = token_obj
+            
+            # Classify token
+            classification = self.reasoning_engine.classify_token(token_data)
             
             # Generate response
             if self.response_generator:
@@ -495,9 +388,6 @@ class ButtonHandler:
             # Show buttons with BALZ Rank hidden
             buttons = self.create_main_buttons(hide_button='balz_rank', show_back=True)
             await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
-            
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             
             logger.info(f"BALZ classification complete: {classification.category.value} for {session.current_token}")
             
@@ -550,9 +440,6 @@ class ButtonHandler:
             buttons = self.create_main_buttons(hide_button='whale_tracker', show_back=True)
             await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
             
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
-            
         except Exception as e:
             logger.error(f"Error in whale analysis: {e}")
             await query.edit_message_text(
@@ -591,7 +478,7 @@ class ButtonHandler:
             )
             
             # Format updated overview
-            from src.bot.message_formatter import MessageFormatter
+            from ..bot.message_formatter import MessageFormatter
             overview_message = MessageFormatter.format_token_overview(token_data)
             
             # Create buttons (all 4 buttons - reset cycle)
@@ -615,15 +502,70 @@ class ButtonHandler:
     
     async def _handle_alert_button(self, query, callback_data: str):
         """
-        Legacy alert button handler - now deprecated
-        Alert buttons are routed directly to dedicated handlers in handle_button_callback
+        Handle buttons from moonshot/rug alerts
+        These buttons contain contract and network info
         """
-        await query.edit_message_text(
-            "❌ Legacy alert handler called. Please try again.",
-            parse_mode='Markdown'
-        )
-        deletion_time = 25 * 60
-        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
+        parts = callback_data.split('_')
+        if len(parts) < 4:
+            await query.edit_message_text("Invalid button data.")
+            return
+        
+        action = parts[1]  # socials, balz, whale, analyze
+        network = parts[2]
+        contract = '_'.join(parts[3:])  # Rejoin contract in case it has underscores
+        
+        # Log the alert button details
+        logger.info(f"Alert button pressed: action={action}, network={network}, contract={contract}")
+        
+        # For analyze button, fetch full token data first
+        if action == 'analyze':
+            await query.edit_message_text("🔍 Analyzing token...")
+            
+            # Check if api_client exists
+            if not self.api_client:
+                logger.error("API client not available in button handler")
+                await query.edit_message_text(
+                    "❌ Bot configuration error. Please try again later.",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            token_data = await self.api_client.get_token_info(network, contract)
+            if token_data:
+                # Create session for this alert token
+                session = self.session_manager.create_session(
+                    chat_id=query.message.chat_id,
+                    user_id=query.from_user.id,
+                    token_name=f"{token_data.name} ({token_data.symbol})",
+                    contract=contract,
+                    network=network,
+                    token_data=token_data.to_dict()
+                )
+                
+                # Show token overview with buttons
+                from ..bot.message_formatter import MessageFormatter
+                overview = MessageFormatter.format_token_overview(token_data)
+                
+                # Create buttons with back option for alerts
+                buttons = self.create_token_overview_buttons_with_back(network, contract)
+                
+                await query.edit_message_text(
+                    overview,
+                    reply_markup=buttons,
+                    parse_mode='Markdown'
+                )
+            else:
+                logger.error(f"Failed to fetch token data for {contract} on {network}")
+                await query.edit_message_text(
+                    f"❌ Unable to fetch token data.\n\nContract: `{contract}`\nNetwork: {network}",
+                    parse_mode='Markdown'
+                )
+        else:
+            # For other alert buttons, we need to implement similar logic
+            await query.edit_message_text(
+                "🚧 Alert button functionality coming soon!",
+                parse_mode='Markdown'
+            )
     
     async def _handle_back_to_alert(self, query, callback_data: str):
         """
@@ -777,9 +719,6 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-        
-        deletion_time = 25 * 60
-        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_prev_moonshot(self, query):
         """Handle previous moonshot navigation"""
@@ -829,9 +768,6 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-        
-        deletion_time = 25 * 60
-        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_next_rug(self, query):
         """Handle next rug navigation"""
@@ -881,9 +817,6 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-        
-        deletion_time = 25 * 60
-        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_prev_rug(self, query):
         """Handle previous rug navigation"""
@@ -933,9 +866,6 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-        
-        deletion_time = 25 * 60
-        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_view_moonshots(self, query):
         """Handle view moonshots from status report"""
@@ -1112,557 +1042,340 @@ class ButtonHandler:
                 deletion_time = 25 * 60  # 25 minutes
                 await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_network_selection(self, query, context, callback_data: str):
+    async def _handle_gem_network_selection(self, query, callback_data: str):
         """Handle network selection in gem research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            network_map = {
-                'gem_network_solana': 'solana',
-                'gem_network_eth': 'eth',
-                'gem_network_bsc': 'bsc', 
-                'gem_network_base': 'base'
-            }
-            
-            network = network_map.get(callback_data)
-            if not network:
-                return
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            gem_handler.update_session_step(chat_id, user_id, 'age', network=network)
-            
-            message, buttons = gem_handler.get_age_selection_message()
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem network selection: {e}")
-            await query.edit_message_text(
-                "❌ **Error**\n\nSomething went wrong. Please try again.",
-                parse_mode='Markdown'
-            )
+        network_map = {
+            'gem_network_solana': 'solana',
+            'gem_network_eth': 'eth',
+            'gem_network_bsc': 'bsc', 
+            'gem_network_base': 'base'
+        }
+        
+        network = network_map.get(callback_data)
+        if not network:
+            return
+        
+        gem_handler = self.bot_handler.gem_research_handler
+        gem_handler.update_session_step(chat_id, user_id, 'age', network=network)
+        
+        message, buttons = gem_handler.get_age_selection_message()
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_age_selection(self, query, context, callback_data: str):
+    async def _handle_gem_age_selection(self, query, callback_data: str):
         """Handle age selection in gem research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
         age_map = {
-            'gem_age_last48': 'last_48',
-            'gem_age_older2days': 'older_2_days'
+            'gem_age_fresh': 'fresh',
+            'gem_age_early': 'early'
         }
         
         age = age_map.get(callback_data)
         if not age:
-            await query.edit_message_text("❌ Invalid age selection. Please try again.")
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
             return
         
         gem_handler = self.bot_handler.gem_research_handler
-        session = gem_handler.create_or_get_session(chat_id, user_id)
+        gem_handler.update_session_step(chat_id, user_id, 'liquidity', age=age)
         
-        age_text = "last 48 hours" if age == 'last_48' else "older than 2 days"
-        progress_message = f"""🔍 **Searching for gems {age_text}...**
-
-⏳ Analyzing pools on {session.criteria.network.upper()}...
-📊 This may take 15-30 seconds due to API rate limits
-
-*Please wait while I gather the data...*"""
-        
+        message, buttons = gem_handler.get_liquidity_selection_message()
         await query.edit_message_text(
-            progress_message,
-            parse_mode='Markdown'
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
         )
-        
-        # Show typing indicator
-        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-        
-        try:
-            # Handle age selection with error handling
-            await gem_handler.handle_age_selection(session, age)
-            gem_handler.update_session_step(chat_id, user_id, 'liquidity', age=age)
-            
-            # Check if we got results
-            if not session.new_pools_list:
-                error_message = f"""❌ **No pools found for {age_text}**
-
-The {session.criteria.network.upper()} network might be experiencing issues or there may be no pools matching your criteria.
-
-[🔄 Try Again] [🌐 Change Network]"""
-                
-                keyboard = [
-                    [
-                        InlineKeyboardButton("🔄 Try Again", callback_data=callback_data),
-                        InlineKeyboardButton("🌐 Change Network", callback_data="choice_gems")
-                    ]
-                ]
-                
-                await query.edit_message_text(
-                    error_message,
-                    parse_mode='Markdown',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            else:
-                network = session.criteria.network if session.criteria else None
-                message, buttons = gem_handler.get_liquidity_selection_message(network)
-                await query.edit_message_text(
-                    message,
-                    parse_mode='Markdown',
-                    reply_markup=buttons
-                )
-                
-        except Exception as e:
-            logger.error(f"Error in gem age selection: {e}")
-            error_message = f"""❌ **Error processing your selection**
-
-Something went wrong while analyzing {age_text} pools on {session.criteria.network.upper()}.
-
-[🔄 Try Again] [🌐 Change Network]"""
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄 Try Again", callback_data=callback_data),
-                    InlineKeyboardButton("🌐 Change Network", callback_data="choice_gems")
-                ]
-            ]
-            
-            await query.edit_message_text(
-                error_message,
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        
         # Schedule deletion
         deletion_time = 25 * 60  # 25 minutes
         await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_liquidity_selection(self, query, context, callback_data: str):
+    async def _handle_gem_liquidity_selection(self, query, callback_data: str):
         """Handle liquidity selection in gem research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            liq_map = {
-                'gem_liq_10_50': '10_50',
-                'gem_liq_50_250': '50_250',
-                'gem_liq_250_1000': '250_1000',
-                'gem_liq_1000_plus': '1000_plus',
-                'gem_liq_sol_2_10': 'sol_2_10',
-                'gem_liq_sol_10_50': 'sol_10_50',
-                'gem_liq_sol_50_150': 'sol_50_150',
-                'gem_liq_sol_150_500': 'sol_150_500'
-            }
-            
-            liquidity = liq_map.get(callback_data)
-            if not liquidity:
-                return
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            gem_handler.update_session_step(chat_id, user_id, 'mcap', liquidity=liquidity)
-            
-            message, buttons = gem_handler.get_mcap_selection_message()
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem liquidity selection: {e}")
-            await query.edit_message_text(
-                "❌ **Error**\n\nSomething went wrong. Please try again.",
-                parse_mode='Markdown'
-            )
+        liq_map = {
+            'gem_liq_10_50': '10_50',
+            'gem_liq_50_250': '50_250',
+            'gem_liq_250_1000': '250_1000',
+            'gem_liq_1000_plus': '1000_plus'
+        }
+        
+        liquidity = liq_map.get(callback_data)
+        if not liquidity:
+            return
+        
+        gem_handler = self.bot_handler.gem_research_handler
+        gem_handler.update_session_step(chat_id, user_id, 'mcap', liquidity=liquidity)
+        
+        message, buttons = gem_handler.get_mcap_selection_message()
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_mcap_selection(self, query, context, callback_data: str):
+    async def _handle_gem_mcap_selection(self, query, callback_data: str):
         """Handle market cap selection and execute research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            mcap_map = {
-                'gem_mcap_micro': 'micro',
-                'gem_mcap_small': 'small',
-                'gem_mcap_mid': 'mid'
-            }
-            
-            mcap = mcap_map.get(callback_data)
-            if not mcap:
-                return
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            session = gem_handler.create_or_get_session(chat_id, user_id)
-            
-            if session.criteria is None:
-                session.criteria = GemCriteria(network='', age='', liquidity='', mcap='')
-            
-            session.criteria.mcap = mcap
-            session.step = 'results'
-            
-            # Show loading message
-            loading_message = gem_handler.get_research_loading_message(session.criteria)
-            await query.edit_message_text(loading_message, parse_mode='Markdown')
-            
-            # Execute research
-            gems = await gem_handler.execute_gem_research(session)
-            
-            if not gems:
-                # No gems found
-                message, buttons = gem_handler.get_no_gems_message(session.criteria.network)
-                await query.edit_message_text(
-                    message,
-                    parse_mode='Markdown',
-                    reply_markup=buttons
-                )
-                # Schedule deletion for no gems found state
-                deletion_time = 25 * 60  # 25 minutes
-                await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            else:
-                # Store results and show first gem
-                session.results = gems
-                session.current_index = 0
-                
-                message, buttons = gem_handler.format_single_gem_result_from_pool(
-                    gems[0], session.criteria, 0, len(gems)
-                )
-                await query.edit_message_text(
-                    message,
-                    parse_mode='Markdown',
-                    reply_markup=buttons
-                )
-                # Schedule deletion for gem result state
-                deletion_time = 25 * 60  # 25 minutes
-                await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-                
-        except Exception as e:
-            logger.error(f"Error in gem mcap selection and research execution: {e}")
+        mcap_map = {
+            'gem_mcap_micro': 'micro',
+            'gem_mcap_small': 'small',
+            'gem_mcap_mid': 'mid'
+        }
+        
+        mcap = mcap_map.get(callback_data)
+        if not mcap:
+            return
+        
+        gem_handler = self.bot_handler.gem_research_handler
+        session = gem_handler.create_or_get_session(chat_id, user_id)
+        session.criteria.mcap = mcap
+        session.step = 'results'
+        
+        # Show loading message
+        loading_message = gem_handler.get_research_loading_message(session.criteria)
+        await query.edit_message_text(loading_message, parse_mode='Markdown')
+        
+        # Execute research
+        gems = await gem_handler.execute_gem_research(session.criteria)
+        
+        if not gems:
+            # No gems found
+            message, buttons = gem_handler.get_no_gems_message(session.criteria.network)
             await query.edit_message_text(
-                "❌ **Error executing gem research**\n\nAPI timeout or rate limit exceeded. Please try again in a few moments.",
-                parse_mode='Markdown'
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
             )
+            # Schedule deletion for no gems found state
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        else:
+            # Store results and show first gem
+            session.results = gems
+            session.current_index = 0
+            
+            message, buttons = gem_handler.format_single_gem_result(
+                gems[0], session.criteria, 0, len(gems)
+            )
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion for gem result state
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_analyze(self, query, context, callback_data: str):
+    async def _handle_gem_analyze(self, query, callback_data: str):
         """Handle gem token details analysis"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
-        user_id = query.from_user.id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            parts = callback_data.split('_')
-            if len(parts) < 4:
-                return
-            
-            network = parts[2]
-            contract = '_'.join(parts[3:])
-            
-            session = self.session_manager.get_session(chat_id, user_id)
-            if not session:
-                session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
-            
-            # Store in session for consistent access pattern
-            session.current_contract = contract
-            session.current_network = network
-            
-            # Get token data using session properties
-            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-            if not token_data:
-                await query.edit_message_text("❌ Unable to fetch token data")
-                return
-            
-            session.current_token = token_data.symbol
-            session.current_token_data = token_data
-            
-            # Format token overview
-            from ..bot.message_formatter import MessageFormatter
-            overview = MessageFormatter.format_token_overview(token_data)
-            
-            # Create back button
-            gem_handler = self.bot_handler.gem_research_handler
-            buttons = gem_handler.create_gem_detail_back_button(0)
-            
-            await query.edit_message_text(
-                overview,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem analyze: {e}")
-            await query.edit_message_text(
-                "❌ **Error analyzing token**\n\nUnable to fetch token data. Please try again.",
-                parse_mode='Markdown'
-            )
+        parts = callback_data.split('_')
+        if len(parts) < 4:
+            return
+        
+        network = parts[2]
+        contract = '_'.join(parts[3:])
+        
+        # Get token data
+        token_data = await self.api_client.get_token_info(network, contract)
+        if not token_data:
+            await query.edit_message_text("❌ Unable to fetch token data")
+            return
+        
+        # Format token overview
+        from ..bot.message_formatter import MessageFormatter
+        overview = MessageFormatter.format_token_overview(token_data)
+        
+        # Create back button
+        gem_handler = self.bot_handler.gem_research_handler
+        buttons = gem_handler.create_gem_detail_back_button(0)
+        
+        await query.edit_message_text(
+            overview,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_socials(self, query, context, callback_data: str):
+    async def _handle_gem_socials(self, query, callback_data: str):
         """Handle gem socials"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
-        user_id = query.from_user.id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        parts = callback_data.split('_')
+        if len(parts) < 4:
+            return
+        
+        network = parts[2]
+        contract = '_'.join(parts[3:])
+        
+        # Get social data
+        social_data = await self.api_client.get_social_info(network, contract)
+        
+        if social_data:
+            # Get token info for name
+            token_data = await self.api_client.get_token_info(network, contract)
+            token_name = f"{token_data.name} ({token_data.symbol})" if token_data else "Token"
             
-            parts = callback_data.split('_')
-            if len(parts) < 4:
-                return
-            
-            network = parts[2]
-            contract = '_'.join(parts[3:])
-            
-            # Get or create session for consistent access pattern
-            session = self.session_manager.get_session(chat_id, user_id)
-            if not session:
-                session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
-            
-            # Store in session for consistent access pattern
-            session.current_contract = contract
-            session.current_network = network
-            
-            # Get social data using session properties
-            social_data = await self.api_client.get_social_info(session.current_network, session.current_contract)
-            
-            if social_data:
-                # Get token info for name using session properties
-                token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-                if token_data:
-                    session.current_token = token_data.symbol
-                    session.current_token_data = token_data
-                    token_name = f"{token_data.name} ({token_data.symbol})"
-                else:
-                    token_name = "Token"
-                
-                response = self._format_social_response(social_data, token_name)
-            else:
-                response = f"📱 **Social Links**\n\nℹ️ No social information available for this token."
-            
-            # Create back button
-            gem_handler = self.bot_handler.gem_research_handler
-            buttons = gem_handler.create_gem_detail_back_button(0)
-            
-            await query.edit_message_text(
-                response,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem socials: {e}")
-            await query.edit_message_text(
-                "❌ **Error fetching social data**\n\nUnable to retrieve social information. Please try again.",
-                parse_mode='Markdown'
-            )
+            response = self._format_social_response(social_data, token_name)
+        else:
+            response = f"📱 **Social Links**\n\nℹ️ No social information available for this token."
+        
+        # Create back button
+        gem_handler = self.bot_handler.gem_research_handler
+        buttons = gem_handler.create_gem_detail_back_button(0)
+        
+        await query.edit_message_text(
+            response,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_whale(self, query, context, callback_data: str):
+    async def _handle_gem_whale(self, query, callback_data: str):
         """Handle gem whale tracker"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            message, buttons = gem_handler.format_whale_tracker_message("Token")
-            
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem whale tracker: {e}")
-            await query.edit_message_text(
-                "❌ **Error loading whale tracker**\n\nUnable to load whale tracking data. Please try again.",
-                parse_mode='Markdown'
-            )
+        gem_handler = self.bot_handler.gem_research_handler
+        message, buttons = gem_handler.format_whale_tracker_message("Token")
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_balz(self, query, context, callback_data: str):
+    async def _handle_gem_balz(self, query, callback_data: str):
         """Handle gem BALZ rank"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
-        user_id = query.from_user.id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            parts = callback_data.split('_')
-            if len(parts) < 4:
-                return
-            
-            network = parts[2]
-            contract = '_'.join(parts[3:])
-            
-            # Get or create session for consistent access pattern
-            session = self.session_manager.get_session(chat_id, user_id)
-            if not session:
-                session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
-            
-            # Store in session for consistent access pattern
-            session.current_contract = contract
-            session.current_network = network
-            
-            # Get token data using session properties
-            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-            if not token_data:
-                await query.edit_message_text("❌ Unable to fetch token data")
-                return
-            
-            session.current_token = token_data.symbol
-            session.current_token_data = token_data
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            gem_session = gem_handler.create_or_get_session(chat_id, user_id)
-            
-            if gem_session.criteria:
-                message, buttons = gem_handler.format_balz_rank_message(token_data, gem_session.criteria)
-            else:
-                # Fallback if no criteria
-                from src.bot.gem_research_handler import GemCriteria
-                default_criteria = GemCriteria(network=network, age='early', liquidity='50_250', mcap='small')
-                message, buttons = gem_handler.format_balz_rank_message(token_data, default_criteria)
-            
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem BALZ rank: {e}")
-            await query.edit_message_text(
-                "❌ **Error calculating BALZ rank**\n\nUnable to fetch token data for ranking. Please try again.",
-                parse_mode='Markdown'
-            )
+        parts = callback_data.split('_')
+        if len(parts) < 4:
+            return
+        
+        network = parts[2]
+        contract = '_'.join(parts[3:])
+        
+        # Get token data
+        token_data = await self.api_client.get_token_info(network, contract)
+        if not token_data:
+            await query.edit_message_text("❌ Unable to fetch token data")
+            return
+        
+        # Get session to get criteria
+        user_id = query.from_user.id
+        gem_handler = self.bot_handler.gem_research_handler
+        session = gem_handler.create_or_get_session(chat_id, user_id)
+        
+        if session.criteria:
+            message, buttons = gem_handler.format_balz_rank_message(token_data, session.criteria)
+        else:
+            # Fallback if no criteria
+            from ..bot.gem_research_handler import GemCriteria
+            default_criteria = GemCriteria(network=network, age='early', liquidity='50_250', mcap='small')
+            message, buttons = gem_handler.format_balz_rank_message(token_data, default_criteria)
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_navigation(self, query, context, callback_data: str, direction: str):
+    async def _handle_gem_navigation(self, query, callback_data: str, direction: str):
         """Handle gem result navigation"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            session = gem_handler.create_or_get_session(chat_id, user_id)
-            
-            if not session.results:
-                await query.edit_message_text("Session expired. Please start a new search.")
-                return
-            
-            # Update index
-            if direction == 'next':
-                session.current_index = min(session.current_index + 1, len(session.results) - 1)
-            else:  # back
-                session.current_index = max(session.current_index - 1, 0)
-            
-            # Show new gem
-            current_gem = session.results[session.current_index]
-            message, buttons = gem_handler.format_single_gem_result_from_pool(
-                current_gem, session.criteria, session.current_index, len(session.results)
-            )
-            
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem navigation: {e}")
-            await query.edit_message_text(
-                "❌ **Error navigating gems**\n\nUnable to load gem data. Please try again.",
-                parse_mode='Markdown'
-            )
+        gem_handler = self.bot_handler.gem_research_handler
+        session = gem_handler.create_or_get_session(chat_id, user_id)
+        
+        if not session.results:
+            await query.edit_message_text("Session expired. Please start a new search.")
+            return
+        
+        # Update index
+        if direction == 'next':
+            session.current_index = min(session.current_index + 1, len(session.results) - 1)
+        else:  # back
+            session.current_index = max(session.current_index - 1, 0)
+        
+        # Show new gem
+        current_gem = session.results[session.current_index]
+        message, buttons = gem_handler.format_single_gem_result(
+            current_gem, session.criteria, session.current_index, len(session.results)
+        )
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_back_to_gem(self, query, context, callback_data: str):
+    async def _handle_back_to_gem(self, query, callback_data: str):
         """Handle back to gem from detail view"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            session = gem_handler.create_or_get_session(chat_id, user_id)
-            
-            if not session.results or session.current_index >= len(session.results):
-                await query.edit_message_text("Session expired. Please start a new search.")
-                return
-            
-            # Show current gem
-            current_gem = session.results[session.current_index]
-            message, buttons = gem_handler.format_single_gem_result_from_pool(
-                current_gem, session.criteria, session.current_index, len(session.results)
-            )
-            
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error returning to gem view: {e}")
-            await query.edit_message_text(
-                "❌ **Error loading gem**\n\nUnable to load gem data. Please try again.",
-                parse_mode='Markdown'
-            )
-    
-    def _format_balz_response(self, classification, token_symbol: str) -> str:
-        """Format BALZ classification response"""
-        header = f"⚖️ **BALZ RANK: {classification.category.value}**"
+        gem_handler = self.bot_handler.gem_research_handler
+        session = gem_handler.create_or_get_session(chat_id, user_id)
         
-        return f"""{header}
-
-**Token:** {token_symbol}
-**Confidence:** {getattr(classification, 'confidence', 'N/A')}
-
-**Analysis:** {getattr(classification, 'reasoning', 'Classification complete')}
-
-{self._get_random_savage_line()}"""
+        if not session.results or session.current_index >= len(session.results):
+            await query.edit_message_text("Session expired. Please start a new search.")
+            return
+        
+        # Show current gem
+        current_gem = session.results[session.current_index]
+        message, buttons = gem_handler.format_single_gem_result(
+            current_gem, session.criteria, session.current_index, len(session.results)
+        )
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=buttons
+        )
+        # Schedule deletion
+        deletion_time = 25 * 60  # 25 minutes
+        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
     def _generate_fallback_balz_response(self, classification, token_data: Dict[str, Any]) -> str:
         """Generate fallback BALZ response without OpenAI"""
@@ -1685,429 +1398,3 @@ Something went wrong while analyzing {age_text} pools on {session.criteria.netwo
 **Assessment:** {classification.reasoning}
 
 {self._get_random_savage_line()}"""
-    
-    async def handle_alert_analyze_button(self, query, callback_data: str):
-        """Handle alert analyze button press"""
-        try:
-            chat_id = query.message.chat_id
-            session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
-            
-            if not session or not hasattr(session, 'alert_context'):
-                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
-                return
-            
-            alert_context = session.alert_context
-            contract = alert_context['contract']
-            network = alert_context['network']
-            
-            # Store in session for consistent access pattern
-            session.current_contract = contract
-            session.current_network = network
-            session.current_token = alert_context['symbol']
-            
-            # Get token info and analyze like normal token analysis
-            await query.edit_message_text("🔍 Analyzing token from alert...")
-            
-            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-            if not token_data:
-                await query.edit_message_text("❌ Unable to fetch token data. Please try again.")
-                return
-            
-            session.current_token_data = token_data
-            
-            # Format token overview
-            from src.bot.message_formatter import MessageFormatter
-            overview = MessageFormatter.format_token_overview(token_data)
-            
-            # Create main buttons
-            buttons = self.create_token_overview_buttons()
-            
-            await query.edit_message_text(overview, reply_markup=buttons, parse_mode='Markdown')
-            
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error handling alert analyze button: {e}")
-            await query.edit_message_text("❌ Error analyzing token. Please try again.")
-    
-    async def handle_alert_socials_button(self, query, callback_data: str):
-        """Handle alert socials button press"""
-        try:
-            chat_id = query.message.chat_id
-            session = self.session_manager.get_session(chat_id, 0)
-            
-            if not session or not hasattr(session, 'alert_context'):
-                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
-                return
-            
-            alert_context = session.alert_context
-            contract = alert_context['contract']
-            network = alert_context['network']
-            symbol = alert_context['symbol']
-            
-            moonshot_token_data = self._get_moonshot_token_data(contract, network, symbol)
-            token_name = moonshot_token_data.symbol if moonshot_token_data else symbol
-            
-            # Store in session for consistent access pattern (same as token analysis)
-            session.current_contract = contract
-            session.current_network = network
-            session.current_token = token_name
-            session.token_data = moonshot_token_data
-            
-            # Show loading message
-            await query.edit_message_text("🔍 Fetching social information...")
-            
-            # API call for social information (same as token analysis)
-            social_data = await self.api_client.get_social_info(
-                session.current_network,
-                session.current_contract
-            )
-            
-            if social_data:
-                response = self._format_social_response(social_data, session.current_token)
-                buttons = self.create_main_buttons(hide_button='socials', show_back=True)
-                
-                await query.edit_message_text(
-                    response,
-                    reply_markup=buttons,
-                    parse_mode='Markdown',
-                    disable_web_page_preview=True
-                )
-            else:
-                buttons = self.create_main_buttons(hide_button='socials', show_back=True)
-                await query.edit_message_text(
-                    f"📱 **Social Links for {session.current_token}**\n\n"
-                    "ℹ️ No social information available for this token.\n\n"
-                    "This could mean:\n"
-                    "• The project hasn't set up social profiles\n"
-                    "• The token is too new\n"
-                    "• It might be a scam token\n\n"
-                    "⚠️ Be extra cautious with tokens that have no social presence!",
-                    reply_markup=buttons,
-                    parse_mode='Markdown'
-                )
-            
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error fetching social data: {e}")
-            await query.edit_message_text(
-                "❌ Error fetching social data. Please try again later.",
-                parse_mode='Markdown'
-            )
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
-    
-    async def handle_alert_whale_button(self, query, callback_data: str):
-        """Handle alert whale button press"""
-        try:
-            chat_id = query.message.chat_id
-            session = self.session_manager.get_session(chat_id, 0)
-            
-            if not session or not hasattr(session, 'alert_context'):
-                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
-                return
-            
-            alert_context = session.alert_context
-            contract = alert_context['contract']
-            network = alert_context['network']
-            symbol = alert_context['symbol']
-            
-            moonshot_token_data = self._get_moonshot_token_data(contract, network, symbol)
-            token_name = moonshot_token_data.symbol if moonshot_token_data else symbol
-            
-            # Store in session for consistent access pattern (same as token analysis)
-            session.current_contract = contract
-            session.current_network = network
-            session.current_token = token_name
-            session.token_data = moonshot_token_data
-            
-            # Show loading message
-            await query.edit_message_text("🐋 Analyzing whale activity...")
-            
-            if self.whale_tracker:
-                # Get whale analysis (same logic as token analysis)
-                whale_data = await self.whale_tracker.analyze_whales(
-                    session.current_network,
-                    session.current_contract,
-                    session.token_data
-                )
-                
-                if whale_data:
-                    response = self.whale_tracker.format_whale_response(
-                        whale_data, session.current_token
-                    )
-                else:
-                    response = (
-                        f"🐋 **Whale Tracker: {session.current_token}**\n\n"
-                        "❌ Unable to analyze whale activity.\n\n"
-                        "This could mean:\n"
-                        "• No recent large transactions\n"
-                        "• Limited trading history\n"
-                        "• Data temporarily unavailable\n\n"
-                        "Try again later for updated analysis."
-                    )
-            else:
-                response = (
-                    f"🐋 **Whale Tracker: {session.current_token}**\n\n"
-                    "⚠️ Whale tracking system is currently unavailable.\n"
-                    "Please try again later."
-                )
-            
-            # Show buttons with Whale Tracker hidden (same as token analysis)
-            buttons = self.create_main_buttons(hide_button='whale_tracker', show_back=True)
-            await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
-            
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in whale analysis: {e}")
-            await query.edit_message_text(
-                "❌ Error analyzing whale activity. Please try again.",
-                parse_mode='Markdown'
-            )
-    
-    async def handle_alert_balz_button(self, query, callback_data: str):
-        """Handle alert BALZ button press"""
-        try:
-            chat_id = query.message.chat_id
-            session = self.session_manager.get_session(chat_id, 0)
-            
-            if not session or not hasattr(session, 'alert_context'):
-                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
-                return
-            
-            alert_context = session.alert_context
-            contract = alert_context['contract']
-            network = alert_context['network']
-            symbol = alert_context['symbol']
-            
-            token_data = self._get_moonshot_token_data(contract, network, symbol)
-            
-            if not token_data:
-                # Fallback: Get token data for BALZ analysis using API
-                token_data = await self.api_client.get_token_info(network, contract)
-                if not token_data:
-                    await query.edit_message_text("❌ Unable to fetch token data for BALZ analysis.")
-                    return
-            
-            # Store in session for consistent access pattern (same as token analysis)
-            session.current_contract = contract
-            session.current_network = network
-            session.current_token = token_data.symbol
-            session.token_data = token_data
-            
-            # Show loading message
-            await query.edit_message_text("⚖️ Analyzing BALZ classification...")
-            
-            # Handle token data for classification (same logic as token analysis)
-            from src.api.geckoterminal_client import TokenData
-            if isinstance(token_data, dict):
-                # Create TokenData from dict
-                token_obj = TokenData(
-                    symbol=token_data.get('symbol', 'UNKNOWN'),
-                    name=token_data.get('name', 'Unknown'),
-                    contract_address=token_data.get('contract_address', ''),
-                    network=token_data.get('network', ''),
-                    price_usd=token_data.get('price_usd', 0),
-                    market_cap_usd=token_data.get('market_cap_usd', 0),
-                    fdv_usd=token_data.get('fdv_usd', 0),
-                    volume_24h=token_data.get('volume_24h', 0),
-                    total_supply=token_data.get('total_supply', '0'),
-                    liquidity_usd=token_data.get('liquidity_usd', 0),
-                    primary_dex=token_data.get('primary_dex', 'Unknown'),
-                    price_change_24h=token_data.get('price_change_24h', 0),
-                    price_change_1h=token_data.get('price_change_1h', 0),
-                    price_change_5m=token_data.get('price_change_5m', 0),
-                    pool_address=token_data.get('pool_address')
-                )
-                classification = self.reasoning_engine.classify_token(token_obj)
-            else:
-                # token_data is already a TokenData object, use it directly
-                classification = self.reasoning_engine.classify_token(token_data)
-            
-            # Generate response (same as token analysis)
-            if self.response_generator:
-                response = await self.response_generator.generate_balz_response(
-                    classification, token_data
-                )
-            else:
-                # Fallback response if no OpenAI
-                response = self._generate_fallback_balz_response(classification, token_data)
-            
-            # Show buttons with BALZ Rank hidden (same as token analysis)
-            buttons = self.create_main_buttons(hide_button='balz_rank', show_back=True)
-            await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
-            
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
-            
-            logger.info(f"BALZ classification complete: {classification.category.value} for {session.current_token}")
-            
-        except Exception as e:
-            logger.error(f"Error generating BALZ analysis: {e}")
-            await query.edit_message_text(
-                "❌ Error generating BALZ analysis. Please try again.",
-                parse_mode='Markdown'
-            )
-    
-    async def handle_back_to_alert_button(self, query, callback_data: str):
-        """Handle back to alert button press"""
-        try:
-            chat_id = query.message.chat_id
-            
-            # Parse contract and network from callback data
-            parts = callback_data.split('_')
-            if len(parts) >= 4:
-                network = parts[2]
-                contract = '_'.join(parts[3:])
-                
-                # Recreate buttons with proper contract/network info
-                buttons = self.create_moonshot_buttons(contract, network)
-                
-                alert_message = f"📊 **Token Alert**\n\n📱 **Contract:** `{contract}`\n\n🌐 **Network:** {network.upper()}\n\n_Select an option below:_"
-            else:
-                # Fallback for malformed callback data
-                alert_message = "📊 **Token Alert**\n\n_Select an option below:_"
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                buttons = InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
-                        InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
-                    ],
-                    [
-                        InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
-                        InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
-                    ]
-                ])
-            
-            await query.edit_message_text(
-                alert_message,
-                reply_markup=buttons,
-                parse_mode='Markdown'
-            )
-            
-            deletion_time = 25 * 60
-            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error handling back to alert button: {e}")
-            await query.edit_message_text("❌ Error returning to alert. Please try again.")
-    
-    async def _handle_gem_auto_search(self, query, context, callback_data: str):
-        """Handle auto-search through all combinations for current network"""
-        chat_id = query.message.chat_id
-        user_id = query.from_user.id
-        message_id = query.message.message_id
-        
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-            
-            gem_handler = self.bot_handler.gem_research_handler
-            session = gem_handler.create_or_get_session(chat_id, user_id)
-            
-            if not session.network:
-                await query.edit_message_text("❌ No network selected. Please start a new search.")
-                return
-            
-            ages = ['last_48', 'older_2_days']
-            liquidity_levels = ['50_250', '250_1000', '10_50', '1000_plus']  # Start with mid-range
-            mcap_levels = ['micro', 'small', 'mid']
-            
-            total_combinations = len(ages) * len(liquidity_levels) * len(mcap_levels)
-            current_combination = 0
-            
-            network_name = session.network.upper()
-            
-            await query.edit_message_text(
-                f"🔍 **Auto-searching {network_name}...**\n\n"
-                f"Trying all {total_combinations} combinations to find gems.\n"
-                f"This may take 30-60 seconds...\n\n"
-                f"⏳ Starting search...",
-                parse_mode='Markdown'
-            )
-            
-            for age in ages:
-                for liquidity in liquidity_levels:
-                    for mcap in mcap_levels:
-                        current_combination += 1
-                        
-                        liquidity_labels = {'10_50': '$10K-$50K', '50_250': '$50K-$250K', '250_1000': '$250K-$1M', '1000_plus': '$1M+'}
-                        mcap_labels = {'micro': 'Under $1M', 'small': '$1M-$10M', 'mid': '$10M-$50M'}
-                        age_label = 'Last 48 hours' if age == 'last_48' else '3-7 days old'
-                        
-                        await query.edit_message_text(
-                            f"🔍 **Auto-searching {network_name}...**\n\n"
-                            f"Trying combination {current_combination} of {total_combinations}\n"
-                            f"📅 Age: {age_label}\n"
-                            f"💧 Liquidity: {liquidity_labels[liquidity]}\n"
-                            f"💰 Market Cap: {mcap_labels[mcap]}\n\n"
-                            f"⏳ Searching...",
-                            parse_mode='Markdown'
-                        )
-                        
-                        await gem_handler.handle_age_selection(session, age)
-                        
-                        if session.criteria is None:
-                            from src.bot.gem_research_handler import GemCriteria
-                            session.criteria = GemCriteria(network=session.network, age=age, liquidity='', mcap='')
-                        session.criteria.liquidity = liquidity
-                        session.criteria.mcap = mcap
-                        session.step = 'results'
-                        
-                        # Execute research for this combination
-                        gems = await gem_handler.execute_gem_research(session)
-                        
-                        if gems and len(gems) > 0:
-                            session.results = gems
-                            session.current_index = 0
-                            
-                            message, buttons = gem_handler.format_single_gem_result_from_pool(
-                                gems[0], session.criteria, 0, len(gems)
-                            )
-                            
-                            liquidity_labels = {'10_50': '$10K-$50K', '50_250': '$50K-$250K', '250_1000': '$250K-$1M', '1000_plus': '$1M+'}
-                            mcap_labels = {'micro': 'Under $1M', 'small': '$1M-$10M', 'mid': '$10M-$50M'}
-                            age_label = 'Last 48 hours' if age == 'last_48' else '3-7 days old'
-                            
-                            success_message = f"🎉 **Found {len(gems)} gems!**\n\nCombination {current_combination}/{total_combinations} succeeded:\n📅 {age_label} • 💧 {liquidity_labels[liquidity]} • 💰 {mcap_labels[mcap]}\n\n" + message
-                            
-                            await query.edit_message_text(
-                                success_message,
-                                parse_mode='Markdown',
-                                reply_markup=buttons
-                            )
-                            
-                            # Schedule deletion
-                            deletion_time = 25 * 60  # 25 minutes
-                            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-                            return
-                        
-                        # Small delay to avoid rate limits
-                        import asyncio
-                        await asyncio.sleep(1)
-            
-            fallback_message, fallback_buttons = gem_handler.get_no_gems_message(session.network)
-            await query.edit_message_text(
-                f"😔 **Auto-search complete**\n\n"
-                f"Tried all {total_combinations} combinations on {network_name}.\n"
-                f"No gems found matching any criteria right now.\n\n"
-                f"Market might be quiet or your network choice needs adjustment.\n\n"
-                f"{fallback_message}",
-                parse_mode='Markdown',
-                reply_markup=fallback_buttons
-            )
-            
-            # Schedule deletion
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-            
-        except Exception as e:
-            logger.error(f"Error in gem auto-search: {e}")
-            await query.edit_message_text(
-                "❌ **Auto-search failed**\n\nAPI timeout or rate limit exceeded. Please try manual search.",
-                parse_mode='Markdown'
-            )

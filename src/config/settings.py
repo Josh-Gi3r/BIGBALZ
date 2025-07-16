@@ -24,16 +24,7 @@ class TelegramConfig:
 
 @dataclass
 class APIConfig:
-    """External API configuration
-    
-    GeckoTerminal Pro Plan Features:
-    - 500,000 API calls per month
-    - 500 calls per minute rate limit
-    - 60+ market data endpoints  
-    - Exclusive data endpoints
-    - 10 years historical data
-    - Priority email support
-    """
+    """External API configuration"""
     openai_api_key: str
     geckoterminal_api_key: Optional[str] = None
     geckoterminal_base_url: str = "https://api.geckoterminal.com/api/v2"
@@ -126,9 +117,6 @@ class Settings:
         bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
         if not bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN is required")
-        
-        allowed_dm_users_str = os.getenv('ALLOWED_DM_USERS', '831955563')
-        self.allowed_dm_users = [int(x.strip()) for x in allowed_dm_users_str.split(',') if x.strip()]
         
         return TelegramConfig(
             bot_token=bot_token,
