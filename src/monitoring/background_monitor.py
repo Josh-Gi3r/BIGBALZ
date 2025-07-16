@@ -959,6 +959,11 @@ class BackgroundMonitor:
                 best_price_change = change
                 best_timeframe = timeframe
         
+        # Check if token is already detected as rugged - skip moonshot alert
+        if contract in self.detected_rugs:
+            logger.info(f"Skipping moonshot alert for {token_symbol} - already detected as rugged")
+            return None
+        
         # STRICTER Moonshot Criteria - Check against all timeframes
         # 100x Moonshot: $10k+ liquidity, +75% in ANY timeframe, $15k+ volume, 75+ txs, $50k+ market cap
         if (liquidity >= 10000 and best_price_change >= 75 and 

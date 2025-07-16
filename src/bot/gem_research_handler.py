@@ -169,8 +169,8 @@ class GemResearchHandler:
         """Create age selection buttons"""
         keyboard = [
             [
-                InlineKeyboardButton("🆕 Fresh Launches", callback_data="gem_age_fresh"),
-                InlineKeyboardButton("📅 Early Stage", callback_data="gem_age_early")
+                InlineKeyboardButton("🆕 Last 48 hours", callback_data="gem_age_last48"),
+                InlineKeyboardButton("📅 Older than 2 days", callback_data="gem_age_older2days")
             ]
         ]
         return InlineKeyboardMarkup(keyboard)
@@ -273,10 +273,8 @@ First up - which network you tryna explore?"""
         """Get age selection message and buttons"""
         message = """How old should your potential gems be?
 
-🆕 Fresh Launches = Last 48 hours
-📅 Early Stage = 3-7 days old
-
-Note: Tokens older than 7 days are usually already discovered"""
+🆕 Last 48 hours = Fresh launches
+📅 Older than 2 days = More established"""
         
         return message, self.create_age_selection_buttons()
     
