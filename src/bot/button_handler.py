@@ -1548,32 +1548,38 @@ class ButtonHandler:
         """Handle back to alert button press"""
         try:
             chat_id = query.message.chat_id
-            session = self.session_manager.get_session(chat_id, 0)
             
-            if not session or not hasattr(session, 'alert_context'):
-                await query.edit_message_text("❌ Alert context expired. Please wait for new alerts.")
-                return
+            # Parse contract and network from callback data
+            parts = callback_data.split('_')
+            if len(parts) >= 4:
+                network = parts[2]
+                contract = '_'.join(parts[3:])
+                
+                # Recreate buttons with proper contract/network info
+                buttons = self.create_moonshot_buttons(contract, network)
+                
+                alert_message = f"📊 **Token Alert**\n\n📱 **Contract:** `{contract}`\n\n🌐 **Network:** {network.upper()}\n\n_Select an option below:_"
+            else:
+                # Fallback for malformed callback data
+                alert_message = "📊 **Token Alert**\n\n_Select an option below:_"
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                buttons = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
+                        InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
+                    ],
+                    [
+                        InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
+                        InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
+                    ]
+                ])
             
-            alert_context = session.alert_context
-            alert_type = alert_context['type']
-            symbol = alert_context['symbol']
-            
-            # Recreate the original alert message and buttons
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
-                    InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
-                ],
-                [
-                    InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
-                    InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
-                ]
-            ])
-            
-            message = f"🔄 **Back to {alert_type.title()} Alert**\n\n**{symbol}** - Use the buttons below to analyze this token."
-            
-            await query.edit_message_text(message, reply_markup=buttons, parse_mode='Markdown')
+            await query.edit_message_text(
+                alert_message,
+                reply_markup=buttons,
+                parse_mode='Markdown'
+            )
             
         except Exception as e:
             logger.error(f"Error handling back to alert button: {e}")
-            await query.edit_message_text("❌ Error returning to alert. Please wait for new alerts.")
+            await query.edit_message_text("❌ Error returning to alert. Please try again.")

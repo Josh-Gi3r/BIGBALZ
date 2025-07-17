@@ -495,20 +495,10 @@ class BackgroundMonitor:
             # Format message
             message = self._format_rug_message(alert)
             
-            # Create buttons for rug alert (same as moonshot)
-            # Just create the button markup directly without needing the handler
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
-                    InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
-                ],
-                [
-                    InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
-                    InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
-                ]
-            ])
+            # Create buttons for rug alert with proper contract/network info
+            from src.bot.button_handler import ButtonHandler
+            button_handler = ButtonHandler(None, None, None, None)
+            buttons = button_handler.create_moonshot_buttons(alert.contract, alert.network)
             
             # Broadcast to all active chats with buttons
             alert_context = {
@@ -1035,19 +1025,10 @@ class BackgroundMonitor:
             # Format message
             message = self._format_moonshot_message(alert)
             
-            # Create buttons for moonshot alert
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-            
-            buttons = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("📊 Token Details", callback_data="alert_analyze"),
-                    InlineKeyboardButton("📱 Socials", callback_data="alert_socials")
-                ],
-                [
-                    InlineKeyboardButton("🐋 Whale Tracker", callback_data="alert_whale"),
-                    InlineKeyboardButton("⚖️ BALZ Rank", callback_data="alert_balz")
-                ]
-            ])
+            # Create buttons for moonshot alert with proper contract/network info
+            from src.bot.button_handler import ButtonHandler
+            button_handler = ButtonHandler(None, None, None, None)
+            buttons = button_handler.create_moonshot_buttons(alert.contract, alert.network)
             
             # Broadcast to all active chats
             alert_context = {
