@@ -331,9 +331,9 @@ This affects potential returns - smaller caps can pump harder but carry way more
         return f"""🔍 Researching {network_names.get(criteria.network, criteria.network)} gems...
 
 Looking for:
-• Age: {age_ranges.get(criteria.age, criteria.age)}
-• Liquidity: {liq_ranges.get(criteria.liquidity, criteria.liquidity)}
-• Market Cap: {mcap_ranges.get(criteria.mcap, criteria.mcap)}
+- Age: {age_ranges.get(criteria.age, criteria.age)}
+- Liquidity: {liq_ranges.get(criteria.liquidity, criteria.liquidity)}
+- Market Cap: {mcap_ranges.get(criteria.mcap, criteria.mcap)}
 
 Scanning pools... ⏳"""
     
@@ -565,6 +565,9 @@ DYOR: This ain't financial advice"""
             logger.info(f"Executing gem research: {criteria.network}, {criteria.age}, {criteria.liquidity}, {criteria.mcap}")
             
             pools = session.new_pools_list or []
+            if not pools:
+                logger.warning(f"No pre-filtered pools found for {criteria.network}, {criteria.age}")
+                return []
             logger.info(f"Using {len(pools)} pre-filtered pools from age selection")
             
             # Filter by liquidity

@@ -1107,6 +1107,8 @@ class ButtonHandler:
             return
         
         gem_handler = self.bot_handler.gem_research_handler
+        session = gem_handler.create_or_get_session(chat_id, user_id)
+        await gem_handler.handle_age_selection(session, age)
         gem_handler.update_session_step(chat_id, user_id, 'liquidity', age=age)
         
         message, buttons = gem_handler.get_liquidity_selection_message()
