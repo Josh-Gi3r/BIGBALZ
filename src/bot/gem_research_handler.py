@@ -618,7 +618,7 @@ DYOR: This ain't financial advice"""
         
         for pool in pools:
             attrs = pool.get('attributes', {})
-            market_cap_usd = attrs.get('market_cap_usd')
+            market_cap_usd = attrs.get('fdv_usd')
             
             if market_cap_usd is None:
                 try:
