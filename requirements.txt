@@ -1,0 +1,33 @@
+# Core bot framework
+python-telegram-bot==20.7
+# asyncio is built-in to Python 3.7+, no need to install
+
+# API clients
+aiohttp==3.9.1
+requests==2.31.0
+
+# AI integration
+openai==1.6.1
+
+# Data handling
+pandas>=2.2.0  # Updated for Python 3.13 compatibility
+numpy>=1.26.2  # Required by pandas
+sqlalchemy==2.0.23
+
+# Configuration
+python-dotenv==1.0.0
+pydantic==2.5.2
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.23.2
+
+# Monitoring
+structlog==23.2.0
+
+# Optional performance optimization
+redis==5.0.1
+
+# Web framework for health checks
+fastapi==0.104.1
+uvicorn==0.24.0
