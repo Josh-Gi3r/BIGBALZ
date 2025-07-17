@@ -682,11 +682,16 @@ class BackgroundMonitor:
         cutoff_time = time.time() - (minutes * 60)
         counts = {'POTENTIAL 100X': 0, 'POTENTIAL 10X': 0, 'POTENTIAL 2X': 0}
         
+        logger.debug(f"Counting moonshots since {cutoff_time}. Total stored: {len(self.detected_moonshots)}")
+        
         for contract, moonshot_alert in self.detected_moonshots.items():
+            logger.debug(f"Checking moonshot {contract}: tier={moonshot_alert.tier}, timestamp={moonshot_alert.timestamp}")
             if moonshot_alert.timestamp.timestamp() >= cutoff_time:
                 if moonshot_alert.tier in counts:
                     counts[moonshot_alert.tier] += 1
+                    logger.debug(f"Counted moonshot {contract} in tier {moonshot_alert.tier}")
         
+        logger.debug(f"Final moonshot counts: {counts}")
         return counts
     
     def _count_recent_rugs(self, minutes: int) -> int:
@@ -965,7 +970,7 @@ class BackgroundMonitor:
             volume_24h >= 15000 and tx_count_24h >= 75 and
             market_cap >= 50000):
             logger.info(f"POTENTIAL 100X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-            return MoonshotAlert(
+            alert = MoonshotAlert(
                 token_symbol=token_symbol,
                 contract=contract,
                 network=network,
@@ -976,13 +981,15 @@ class BackgroundMonitor:
                 transaction_count=tx_count_24h,
                 timestamp=datetime.utcnow()
             )
+            logger.debug(f"Created 100X moonshot alert for {contract} at {alert.timestamp}")
+            return alert
         
         # 10x Moonshot: $20k+ liquidity, +30% in ANY timeframe, $30k+ volume, 100+ txs, $100k+ market cap
         elif (liquidity >= 20000 and best_price_change >= 30 and 
               volume_24h >= 30000 and tx_count_24h >= 100 and
               market_cap >= 100000):
             logger.info(f"POTENTIAL 10X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-            return MoonshotAlert(
+            alert = MoonshotAlert(
                 token_symbol=token_symbol,
                 contract=contract,
                 network=network,
@@ -993,13 +1000,15 @@ class BackgroundMonitor:
                 transaction_count=tx_count_24h,
                 timestamp=datetime.utcnow()
             )
+            logger.debug(f"Created 10X moonshot alert for {contract} at {alert.timestamp}")
+            return alert
         
         # 2x Moonshot: $75k+ liquidity, +20% in ANY timeframe, $75k+ volume, 150+ txs, $500k+ market cap
         elif (liquidity >= 75000 and best_price_change >= 20 and 
               volume_24h >= 75000 and tx_count_24h >= 150 and
               market_cap >= 500000):
             logger.info(f"POTENTIAL 2X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-            return MoonshotAlert(
+            alert = MoonshotAlert(
                 token_symbol=token_symbol,
                 contract=contract,
                 network=network,
@@ -1010,6 +1019,8 @@ class BackgroundMonitor:
                 transaction_count=tx_count_24h,
                 timestamp=datetime.utcnow()
             )
+            logger.debug(f"Created 2X moonshot alert for {contract} at {alert.timestamp}")
+            return alert
         
         return None
     
@@ -1017,6 +1028,9 @@ class BackgroundMonitor:
         """Broadcast moonshot alert with buttons"""
         try:
             logger.info(f"🚀 Broadcasting moonshot alert for {alert.token_symbol} on {alert.network}")
+            
+            self.detected_moonshots[alert.contract] = alert
+            logger.debug(f"Stored moonshot alert for {alert.contract} in detected_moonshots. Total: {len(self.detected_moonshots)}")
             
             # Format message
             message = self._format_moonshot_message(alert)

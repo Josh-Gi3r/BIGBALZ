@@ -464,25 +464,51 @@ class GeckoTerminalClient:
             max_pools: Maximum pools to fetch (up to 1000)
             
         Returns:
-            List of new pool data
+            List of new pool data with enriched token information
         """
         all_pools = []
         for page in range(1, 11):
-            url = f"{self.BASE_URL}/networks/new_pools?page={page}"
+            # Use network-specific endpoint with include parameter
+            url = f"{self.BASE_URL}/networks/{network}/new_pools?page={page}&include=base_token,quote_token"
             data = await self._make_request(url, priority=3)
             
             if not data or not data.get('data'):
                 break
                 
             pools = data.get('data', [])
+            included = data.get('included', [])
             
-            network_pools = []
+            token_lookup = {}
+            for item in included:
+                if item.get('type') == 'token':
+                    token_lookup[item.get('id')] = item.get('attributes', {})
+            
+            # Enrich pool data with token information
+            enriched_pools = []
             for pool in pools:
                 pool_attrs = pool.get('attributes', {})
-                if pool_attrs.get('network') == network:
-                    network_pools.append(pool)
+                relationships = pool.get('relationships', {})
+                
+                base_token_rel = relationships.get('base_token', {})
+                base_token_id = base_token_rel.get('data', {}).get('id')
+                
+                if base_token_id and base_token_id in token_lookup:
+                    token_data = token_lookup[base_token_id]
+                    
+                    enriched_pool = pool.copy()
+                    enriched_attrs = enriched_pool.get('attributes', {}).copy()
+                    
+                    enriched_attrs['base_token_symbol'] = token_data.get('symbol', 'UNKNOWN')
+                    enriched_attrs['network'] = network  # Set network explicitly
+                    enriched_attrs['market_cap_usd'] = token_data.get('market_cap_usd')
+                    enriched_attrs['fdv_usd'] = token_data.get('fdv_usd')
+                    
+                    enriched_pool['_token_data'] = token_data
+                    
+                    enriched_pool['attributes'] = enriched_attrs
+                    enriched_pools.append(enriched_pool)
             
-            all_pools.extend(network_pools)
+            all_pools.extend(enriched_pools)
             
             if len(all_pools) >= max_pools:
                 break
@@ -547,17 +573,52 @@ class GeckoTerminalClient:
             max_pools: Maximum pools to fetch
             
         Returns:
-            List of pool data
+            List of pool data with enriched token information
         """
         all_pools = []
         for page in range(1, 11):
-            url = f"{self.BASE_URL}/networks/{network}/pools?sort={sort}&page={page}"
+            url = f"{self.BASE_URL}/networks/{network}/pools?sort={sort}&page={page}&include=base_token,quote_token"
             data = await self._make_request(url, priority=3)
             
             if not data or not data.get('data'):
                 break
                 
-            all_pools.extend(data.get('data', []))
+            pools = data.get('data', [])
+            included = data.get('included', [])
+            
+            token_lookup = {}
+            for item in included:
+                if item.get('type') == 'token':
+                    token_lookup[item.get('id')] = item.get('attributes', {})
+            
+            # Enrich pool data with token information
+            enriched_pools = []
+            for pool in pools:
+                relationships = pool.get('relationships', {})
+                
+                base_token_rel = relationships.get('base_token', {})
+                base_token_id = base_token_rel.get('data', {}).get('id')
+                
+                if base_token_id and base_token_id in token_lookup:
+                    token_data = token_lookup[base_token_id]
+                    
+                    enriched_pool = pool.copy()
+                    enriched_attrs = enriched_pool.get('attributes', {}).copy()
+                    
+                    enriched_attrs['base_token_symbol'] = token_data.get('symbol', 'UNKNOWN')
+                    enriched_attrs['network'] = network  # Set network explicitly
+                    
+                    if not enriched_attrs.get('market_cap_usd'):
+                        enriched_attrs['market_cap_usd'] = token_data.get('market_cap_usd')
+                    if not enriched_attrs.get('fdv_usd'):
+                        enriched_attrs['fdv_usd'] = token_data.get('fdv_usd')
+                    
+                    enriched_pool['attributes'] = enriched_attrs
+                    enriched_pools.append(enriched_pool)
+                else:
+                    enriched_pools.append(pool)
+            
+            all_pools.extend(enriched_pools)
             
             if len(all_pools) >= max_pools:
                 break

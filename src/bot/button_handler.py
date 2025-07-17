@@ -1084,8 +1084,8 @@ class ButtonHandler:
         message_id = query.message.message_id
         
         age_map = {
-            'gem_age_fresh': 'fresh',
-            'gem_age_early': 'early'
+            'gem_age_last48': 'last_48',
+            'gem_age_older2days': 'older_2_days'
         }
         
         age = age_map.get(callback_data)
