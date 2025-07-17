@@ -407,7 +407,7 @@ class ButtonHandler:
                 return
             
             # Reconstruct TokenData object from dict if needed
-            from ..api.geckoterminal_client import TokenData
+            from src.api.geckoterminal_client import TokenData
             if isinstance(token_data, dict):
                 # Create TokenData from dict
                 token_obj = TokenData(
@@ -540,7 +540,7 @@ class ButtonHandler:
             )
             
             # Format updated overview
-            from ..bot.message_formatter import MessageFormatter
+            from src.bot.message_formatter import MessageFormatter
             overview_message = MessageFormatter.format_token_overview(token_data)
             
             # Create buttons (all 4 buttons - reset cycle)
@@ -1359,7 +1359,7 @@ class ButtonHandler:
             message, buttons = gem_handler.format_balz_rank_message(token_data, gem_session.criteria)
         else:
             # Fallback if no criteria
-            from ..bot.gem_research_handler import GemCriteria
+            from src.bot.gem_research_handler import GemCriteria
             default_criteria = GemCriteria(network=network, age='early', liquidity='50_250', mcap='small')
             message, buttons = gem_handler.format_balz_rank_message(token_data, default_criteria)
         
@@ -1499,7 +1499,7 @@ class ButtonHandler:
             session.current_token_data = token_data
             
             # Format token overview
-            from ..bot.message_formatter import MessageFormatter
+            from src.bot.message_formatter import MessageFormatter
             overview = MessageFormatter.format_token_overview(token_data)
             
             # Create main buttons
