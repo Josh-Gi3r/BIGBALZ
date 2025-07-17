@@ -276,6 +276,8 @@ class ButtonHandler:
                 "⏰ Session expired. Please send a new contract address.",
                 parse_mode='Markdown'
             )
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             return
         
         # Route to appropriate handler
@@ -289,8 +291,12 @@ class ButtonHandler:
                     "❌ An error occurred. Please try again.",
                     parse_mode='Markdown'
                 )
+                deletion_time = 25 * 60
+                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
         else:
             await query.edit_message_text("Unknown button action.")
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def handle_socials_button(self, query, session: SessionState):
         """
@@ -317,6 +323,8 @@ class ButtonHandler:
                     parse_mode='Markdown',
                     disable_web_page_preview=True
                 )
+                deletion_time = 25 * 60
+                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             else:
                 buttons = self.create_main_buttons(hide_button='socials', show_back=True)
                 await query.edit_message_text(
@@ -330,12 +338,16 @@ class ButtonHandler:
                     reply_markup=buttons,
                     parse_mode='Markdown'
                 )
+                deletion_time = 25 * 60
+                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
         except Exception as e:
             logger.error(f"Error fetching social data: {e}")
             await query.edit_message_text(
                 "❌ Error fetching social data. Please try again later.",
                 parse_mode='Markdown'
             )
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def handle_balz_button(self, query, session: SessionState):
         """
