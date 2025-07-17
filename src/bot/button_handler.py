@@ -1160,7 +1160,8 @@ class ButtonHandler:
         await gem_handler.handle_age_selection(session, age)
         gem_handler.update_session_step(chat_id, user_id, 'liquidity', age=age)
         
-        message, buttons = gem_handler.get_liquidity_selection_message()
+        network = session.criteria.network if session.criteria else None
+        message, buttons = gem_handler.get_liquidity_selection_message(network)
         await query.edit_message_text(
             message,
             parse_mode='Markdown',
@@ -1180,7 +1181,11 @@ class ButtonHandler:
             'gem_liq_10_50': '10_50',
             'gem_liq_50_250': '50_250',
             'gem_liq_250_1000': '250_1000',
-            'gem_liq_1000_plus': '1000_plus'
+            'gem_liq_1000_plus': '1000_plus',
+            'gem_liq_sol_2_10': 'sol_2_10',
+            'gem_liq_sol_10_50': 'sol_10_50',
+            'gem_liq_sol_50_150': 'sol_50_150',
+            'gem_liq_sol_150_500': 'sol_150_500'
         }
         
         liquidity = liq_map.get(callback_data)

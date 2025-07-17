@@ -177,18 +177,30 @@ class GemResearchHandler:
         ]
         return InlineKeyboardMarkup(keyboard)
     
-    def create_liquidity_selection_buttons(self) -> InlineKeyboardMarkup:
-        """Create liquidity range selection buttons"""
-        keyboard = [
-            [
-                InlineKeyboardButton("$10K-$50K", callback_data="gem_liq_10_50"),
-                InlineKeyboardButton("$50K-$250K", callback_data="gem_liq_50_250")
-            ],
-            [
-                InlineKeyboardButton("$250K-$1M", callback_data="gem_liq_250_1000"),
-                InlineKeyboardButton("$1M+", callback_data="gem_liq_1000_plus")
+    def create_liquidity_selection_buttons(self, network: str = None) -> InlineKeyboardMarkup:
+        """Create liquidity range selection buttons (network-specific for Solana)"""
+        if network == 'solana':
+            keyboard = [
+                [
+                    InlineKeyboardButton("$2K-$10K", callback_data="gem_liq_sol_2_10"),
+                    InlineKeyboardButton("$10K-$50K", callback_data="gem_liq_sol_10_50")
+                ],
+                [
+                    InlineKeyboardButton("$50K-$150K", callback_data="gem_liq_sol_50_150"),
+                    InlineKeyboardButton("$150K-$500K", callback_data="gem_liq_sol_150_500")
+                ]
             ]
-        ]
+        else:
+            keyboard = [
+                [
+                    InlineKeyboardButton("$10K-$50K", callback_data="gem_liq_10_50"),
+                    InlineKeyboardButton("$50K-$250K", callback_data="gem_liq_50_250")
+                ],
+                [
+                    InlineKeyboardButton("$250K-$1M", callback_data="gem_liq_250_1000"),
+                    InlineKeyboardButton("$1M+", callback_data="gem_liq_1000_plus")
+                ]
+            ]
         return InlineKeyboardMarkup(keyboard)
     
     def create_mcap_selection_buttons(self) -> InlineKeyboardMarkup:
@@ -280,14 +292,21 @@ First up - which network you tryna explore?"""
         
         return message, self.create_age_selection_buttons()
     
-    def get_liquidity_selection_message(self) -> Tuple[str, InlineKeyboardMarkup]:
+    def get_liquidity_selection_message(self, network: str = None) -> Tuple[str, InlineKeyboardMarkup]:
         """Get liquidity selection message and buttons"""
-        message = """Minimum liquidity pool?
+        if network == 'solana':
+            message = """Minimum liquidity pool?
+
+Solana's micro-liquidity ecosystem - optimized ranges:
+Lower liquidity = ultra early entry but higher risk
+Higher liquidity = easier exit but fewer opportunities"""
+        else:
+            message = """Minimum liquidity pool?
 
 Higher liquidity = easier to exit but might miss early gains
 Lower liquidity = earlier entry but harder to sell"""
         
-        return message, self.create_liquidity_selection_buttons()
+        return message, self.create_liquidity_selection_buttons(network)
     
     def get_mcap_selection_message(self) -> Tuple[str, InlineKeyboardMarkup]:
         """Get market cap selection message and buttons"""
@@ -594,7 +613,7 @@ DYOR: This ain't financial advice"""
             return []
     
     def _filter_pools_by_liquidity(self, pools: List[Dict], liquidity: str) -> List[Dict]:
-        """Filter pools by liquidity criteria"""
+        """Filter pools by liquidity criteria (supports Solana-specific ranges)"""
         filtered_pools = []
         
         for pool in pools:
@@ -608,6 +627,14 @@ DYOR: This ain't financial advice"""
             elif liquidity == '250_1000' and 250000 <= reserve_usd <= 1000000:  # $250K-$1M
                 filtered_pools.append(pool)
             elif liquidity == '1000_plus' and reserve_usd >= 1000000:  # $1M+
+                filtered_pools.append(pool)
+            elif liquidity == 'sol_2_10' and 2000 <= reserve_usd <= 10000:  # $2K-$10K
+                filtered_pools.append(pool)
+            elif liquidity == 'sol_10_50' and 10000 <= reserve_usd <= 50000:  # $10K-$50K
+                filtered_pools.append(pool)
+            elif liquidity == 'sol_50_150' and 50000 <= reserve_usd <= 150000:  # $50K-$150K
+                filtered_pools.append(pool)
+            elif liquidity == 'sol_150_500' and 150000 <= reserve_usd <= 500000:  # $150K-$500K
                 filtered_pools.append(pool)
         
         return filtered_pools
