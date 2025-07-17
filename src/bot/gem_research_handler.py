@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from ..algorithms.gem_risk_scoring import GEM_RISK_SCORING
+from src.algorithms.gem_risk_scoring import GEM_RISK_SCORING
 
 from src.api.geckoterminal_client import TokenData
 

@@ -12,10 +12,10 @@ from collections import defaultdict
 import time
 import random
 
-from ..api.geckoterminal_client import GeckoTerminalClient
-from ..bot.telegram_handler import TelegramBotHandler
-from ..algorithms.moonshot_criteria import MOONSHOT_CRITERIA_LIST, TIER_CONFIG
-from ..algorithms.rug_detection import (
+from src.api.geckoterminal_client import GeckoTerminalClient
+from src.bot.telegram_handler import TelegramBotHandler
+from src.algorithms.moonshot_criteria import MOONSHOT_CRITERIA_LIST, TIER_CONFIG
+from src.algorithms.rug_detection import (
     RUG_LIQUIDITY_DRAIN_CRITERIA, 
     RUG_PRICE_CRASH_CRITERIA, 
     RUG_VOLUME_DUMP_CRITERIA,

@@ -10,12 +10,12 @@ from collections import defaultdict
 
 from .geckoterminal_client import GeckoTerminalClient
 
-from ..algorithms.whale_confidence import (
+from src.algorithms.whale_confidence import (
     WHALE_THRESHOLDS, WHALE_VOLUME_THRESHOLD, CONFIDENCE_SCORING,
     RISK_LEVELS, RECENT_ACTIVITY_TIMEFRAME
 )
 
-from ..bot.message_formatter import MessageFormatter
+from src.bot.message_formatter import MessageFormatter
 
 logger = logging.getLogger(__name__)
 
