@@ -591,13 +591,13 @@ DYOR: This ain't financial advice"""
             attrs = pool.get('attributes', {})
             reserve_usd = float(attrs.get('reserve_in_usd', 0))
             
-            if liquidity == '10_50' and 5000 <= reserve_usd <= 100000:  # Lowered from 10K-50K
+            if liquidity == '10_50' and 1000 <= reserve_usd <= 15000:  # Covers most pools
                 filtered_pools.append(pool)
-            elif liquidity == '50_250' and 25000 <= reserve_usd <= 500000:  # Adjusted from 50K-250K
+            elif liquidity == '50_250' and 5000 <= reserve_usd <= 50000:  # Mid-range pools
                 filtered_pools.append(pool)
-            elif liquidity == '250_1000' and 100000 <= reserve_usd <= 2000000:  # Adjusted from 250K-1M
+            elif liquidity == '250_1000' and 15000 <= reserve_usd <= 150000:  # Higher liquidity
                 filtered_pools.append(pool)
-            elif liquidity == '1000_plus' and reserve_usd >= 500000:  # Lowered from 1M+
+            elif liquidity == '1000_plus' and reserve_usd >= 50000:  # Top tier pools
                 filtered_pools.append(pool)
         
         return filtered_pools
