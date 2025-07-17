@@ -8,10 +8,10 @@ from typing import Optional, Dict, Any
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from ..classification.reasoning_engine import ReasoningEngine
-from ..classification.response_generator import ResponseGenerator
-from ..api.whale_tracker import WhaleTracker
-from ..database.session_manager import SessionState
+from src.classification.reasoning_engine import ReasoningEngine
+from src.classification.response_generator import ResponseGenerator
+from src.api.whale_tracker import WhaleTracker
+from src.database.session_manager import SessionState
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +203,46 @@ class ButtonHandler:
         
         # Handle alert buttons (from moonshot/rug alerts)
         if callback_data.startswith('alert_'):
-            await self._handle_alert_button(query, callback_data)
+            parts = callback_data.split('_')
+            if len(parts) >= 4:
+                action = parts[1]  # analyze, socials, whale, balz
+                network = parts[2]
+                contract = '_'.join(parts[3:])
+                
+                session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
+                if not session:
+                    session = self.session_manager.create_session(
+                        chat_id=chat_id,
+                        user_id=0,
+                        token_name="Alert Token",
+                        contract=contract,
+                        network=network,
+                        token_data={}
+                    )
+                
+                session.alert_context = {
+                    'contract': contract,
+                    'network': network,
+                    'symbol': 'Alert Token'  # Will be updated when token data is fetched
+                }
+                
+                # Route to appropriate alert handler
+                if action == 'analyze':
+                    await self.handle_alert_analyze_button(query, callback_data)
+                elif action == 'socials':
+                    await self.handle_alert_socials_button(query, callback_data)
+                elif action == 'whale':
+                    await self.handle_alert_whale_button(query, callback_data)
+                elif action == 'balz':
+                    await self.handle_alert_balz_button(query, callback_data)
+                else:
+                    await query.edit_message_text("❌ Unknown alert action.")
+                    deletion_time = 25 * 60
+                    await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
+            else:
+                await query.edit_message_text("❌ Invalid alert button data.")
+                deletion_time = 25 * 60
+                await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             return
         
         # Handle back to alert button
@@ -525,70 +564,15 @@ class ButtonHandler:
     
     async def _handle_alert_button(self, query, callback_data: str):
         """
-        Handle buttons from moonshot/rug alerts
-        These buttons contain contract and network info
+        Legacy alert button handler - now deprecated
+        Alert buttons are routed directly to dedicated handlers in handle_button_callback
         """
-        parts = callback_data.split('_')
-        if len(parts) < 4:
-            await query.edit_message_text("Invalid button data.")
-            return
-        
-        action = parts[1]  # socials, balz, whale, analyze
-        network = parts[2]
-        contract = '_'.join(parts[3:])  # Rejoin contract in case it has underscores
-        
-        # Log the alert button details
-        logger.info(f"Alert button pressed: action={action}, network={network}, contract={contract}")
-        
-        # For analyze button, fetch full token data first
-        if action == 'analyze':
-            await query.edit_message_text("🔍 Analyzing token...")
-            
-            # Check if api_client exists
-            if not self.api_client:
-                logger.error("API client not available in button handler")
-                await query.edit_message_text(
-                    "❌ Bot configuration error. Please try again later.",
-                    parse_mode='Markdown'
-                )
-                return
-            
-            token_data = await self.api_client.get_token_info(network, contract)
-            if token_data:
-                # Create session for this alert token (use same user_id as broadcast for consistency)
-                session = self.session_manager.create_session(
-                    chat_id=query.message.chat_id,
-                    user_id=0,  # Use 0 to match broadcast session
-                    token_name=f"{token_data.name} ({token_data.symbol})",
-                    contract=contract,
-                    network=network,
-                    token_data=token_data.to_dict()
-                )
-                
-                # Show token overview with buttons
-                from ..bot.message_formatter import MessageFormatter
-                overview = MessageFormatter.format_token_overview(token_data)
-                
-                # Create buttons with back option for alerts
-                buttons = self.create_token_overview_buttons_with_back(network, contract)
-                
-                await query.edit_message_text(
-                    overview,
-                    reply_markup=buttons,
-                    parse_mode='Markdown'
-                )
-            else:
-                logger.error(f"Failed to fetch token data for {contract} on {network}")
-                await query.edit_message_text(
-                    f"❌ Unable to fetch token data.\n\nContract: `{contract}`\nNetwork: {network}",
-                    parse_mode='Markdown'
-                )
-        else:
-            # For other alert buttons, we need to implement similar logic
-            await query.edit_message_text(
-                "🚧 Alert button functionality coming soon!",
-                parse_mode='Markdown'
-            )
+        await query.edit_message_text(
+            "❌ Legacy alert handler called. Please try again.",
+            parse_mode='Markdown'
+        )
+        deletion_time = 25 * 60
+        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_back_to_alert(self, query, callback_data: str):
         """
