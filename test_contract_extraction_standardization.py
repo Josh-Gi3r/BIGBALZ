@@ -36,11 +36,21 @@ async def test_contract_extraction_standardization():
             bot_handler=mock_bot_handler
         )
         
+        def mock_format_balz_response(classification, token_symbol):
+            return f"BALZ RANK: {classification.category.value} for {token_symbol}"
+        
+        button_handler._format_balz_response = mock_format_balz_response
+        
         mock_token_data = MagicMock()
         mock_token_data.name = "Test Token"
         mock_token_data.symbol = test_symbol
         mock_token_data.price_usd = 0.001
         mock_token_data.market_cap_usd = 1000000
+        mock_token_data.fdv_usd = 1200000
+        mock_token_data.volume_24h = 50000
+        mock_token_data.liquidity = 25000
+        mock_token_data.price_change_24h = 15.5
+        mock_token_data.transactions_24h = 150
         mock_api_client.get_token_info.return_value = mock_token_data
         
         mock_social_data = MagicMock()
@@ -49,6 +59,8 @@ async def test_contract_extraction_standardization():
         
         mock_classification = MagicMock()
         mock_classification.category.value = "POTENTIAL MOONSHOT"
+        mock_classification.confidence = 0.85
+        mock_classification.reasoning = "Test reasoning"
         mock_reasoning_engine.classify_token.return_value = mock_classification
         
         api_calls = []

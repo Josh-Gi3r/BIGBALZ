@@ -1438,6 +1438,19 @@ class ButtonHandler:
         deletion_time = 25 * 60  # 25 minutes
         await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
+    def _format_balz_response(self, classification, token_symbol: str) -> str:
+        """Format BALZ classification response"""
+        header = f"⚖️ **BALZ RANK: {classification.category.value}**"
+        
+        return f"""{header}
+
+**Token:** {token_symbol}
+**Confidence:** {getattr(classification, 'confidence', 'N/A')}
+
+**Analysis:** {getattr(classification, 'reasoning', 'Classification complete')}
+
+{self._get_random_savage_line()}"""
+    
     def _generate_fallback_balz_response(self, classification, token_data: Dict[str, Any]) -> str:
         """Generate fallback BALZ response without OpenAI"""
         symbol = token_data.get('symbol', 'UNKNOWN')
