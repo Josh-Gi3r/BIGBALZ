@@ -119,6 +119,15 @@ class TelegramBotHandler:
                 # Store alert context for button handlers if provided
                 if alert_context:
                     session = self.session_manager.get_session(chat_id, 0)  # Use 0 for broadcast user_id
+                    if not session:
+                        session = self.session_manager.create_session(
+                            chat_id=chat_id,
+                            user_id=0,
+                            token_name=alert_context.get('symbol', 'Alert'),
+                            contract=alert_context.get('contract', ''),
+                            network=alert_context.get('network', ''),
+                            token_data={}
+                        )
                     session.alert_context = alert_context
                     logger.info(f"📝 Stored alert context for chat {chat_id}: {alert_context}")
                 
