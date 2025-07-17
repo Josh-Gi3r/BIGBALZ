@@ -406,7 +406,7 @@ class ButtonHandler:
                 )
                 return
             
-            # Reconstruct TokenData object from dict if needed
+            # Handle token data for classification
             from src.api.geckoterminal_client import TokenData
             if isinstance(token_data, dict):
                 # Create TokenData from dict
@@ -427,10 +427,10 @@ class ButtonHandler:
                     price_change_5m=token_data.get('price_change_5m', 0),
                     pool_address=token_data.get('pool_address')
                 )
-                token_data = token_obj
-            
-            # Classify token
-            classification = self.reasoning_engine.classify_token(token_data)
+                classification = self.reasoning_engine.classify_token(token_obj)
+            else:
+                # token_data is already a TokenData object, use it directly
+                classification = self.reasoning_engine.classify_token(token_data)
             
             # Generate response
             if self.response_generator:
