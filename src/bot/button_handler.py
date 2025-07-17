@@ -55,6 +55,44 @@ class ButtonHandler:
             'back_to_alert': self.handle_back_to_alert_button
         }
         
+    def _get_moonshot_token_data(self, contract: str, network: str, symbol: str):
+        """
+        Get rich token data from moonshot alert if available, otherwise return None
+        
+        Args:
+            contract: Token contract address
+            network: Network identifier
+            symbol: Token symbol from alert context
+            
+        Returns:
+            TokenData object with rich moonshot data or None if not available
+        """
+        if not self.bot_handler or not self.bot_handler.background_monitor:
+            return None
+            
+        moonshot_alert = self.bot_handler.background_monitor.detected_moonshots.get(contract)
+        if not moonshot_alert:
+            return None
+            
+        from src.api.geckoterminal_client import TokenData
+        return TokenData(
+            symbol=moonshot_alert.token_symbol,
+            name=moonshot_alert.token_symbol,
+            contract_address=contract,
+            network=network,
+            price_usd=0.0,
+            market_cap_usd=0.0,
+            fdv_usd=0.0,
+            volume_24h=moonshot_alert.volume_24h,
+            total_supply="0",
+            liquidity_usd=moonshot_alert.liquidity,
+            primary_dex="Unknown",
+            price_change_24h=moonshot_alert.price_change_percent,
+            price_change_1h=0.0,
+            price_change_5m=0.0,
+            pool_address=None
+        )
+        
     async def _schedule_message_deletion(self, chat_id: int, message_id: int, deletion_time: int):
         """Schedule message deletion through bot handler"""
         if self.bot_handler:
@@ -1531,33 +1569,59 @@ class ButtonHandler:
             network = alert_context['network']
             symbol = alert_context['symbol']
             
-            # Store in session for consistent access pattern
+            moonshot_token_data = self._get_moonshot_token_data(contract, network, symbol)
+            token_name = moonshot_token_data.symbol if moonshot_token_data else symbol
+            
+            # Store in session for consistent access pattern (same as token analysis)
             session.current_contract = contract
             session.current_network = network
-            session.current_token = symbol
+            session.current_token = token_name
+            session.token_data = moonshot_token_data
             
-            # Get social data using session properties
-            social_data = await self.api_client.get_social_info(session.current_network, session.current_contract)
+            # Show loading message
+            await query.edit_message_text("🔍 Fetching social information...")
+            
+            # API call for social information (same as token analysis)
+            social_data = await self.api_client.get_social_info(
+                session.current_network,
+                session.current_contract
+            )
             
             if social_data:
                 response = self._format_social_response(social_data, session.current_token)
+                buttons = self.create_main_buttons(hide_button='socials', show_back=True)
+                
+                await query.edit_message_text(
+                    response,
+                    reply_markup=buttons,
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
+                )
             else:
-                response = f"📱 **Social Links for {session.current_token}**\n\n" \
-                          "ℹ️ No social information available for this token."
-            
-            # Create back button
-            back_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("← Back to Alert", callback_data=f"back_to_alert_{network}_{contract}")]
-            ])
-            
-            await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+                buttons = self.create_main_buttons(hide_button='socials', show_back=True)
+                await query.edit_message_text(
+                    f"📱 **Social Links for {session.current_token}**\n\n"
+                    "ℹ️ No social information available for this token.\n\n"
+                    "This could mean:\n"
+                    "• The project hasn't set up social profiles\n"
+                    "• The token is too new\n"
+                    "• It might be a scam token\n\n"
+                    "⚠️ Be extra cautious with tokens that have no social presence!",
+                    reply_markup=buttons,
+                    parse_mode='Markdown'
+                )
             
             deletion_time = 25 * 60
-            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             
         except Exception as e:
-            logger.error(f"Error handling alert socials button: {e}")
-            await query.edit_message_text("❌ Error fetching social data. Please try again.")
+            logger.error(f"Error fetching social data: {e}")
+            await query.edit_message_text(
+                "❌ Error fetching social data. Please try again later.",
+                parse_mode='Markdown'
+            )
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def handle_alert_whale_button(self, query, callback_data: str):
         """Handle alert whale button press"""
@@ -1574,28 +1638,60 @@ class ButtonHandler:
             network = alert_context['network']
             symbol = alert_context['symbol']
             
-            # Store in session for consistent access pattern
+            moonshot_token_data = self._get_moonshot_token_data(contract, network, symbol)
+            token_name = moonshot_token_data.symbol if moonshot_token_data else symbol
+            
+            # Store in session for consistent access pattern (same as token analysis)
             session.current_contract = contract
             session.current_network = network
-            session.current_token = symbol
+            session.current_token = token_name
+            session.token_data = moonshot_token_data
             
-            response = f"🐋 **Whale Tracker: {session.current_token}**\n\n" \
-                      "❌ Unable to analyze whale activity for alerts.\n\n" \
-                      "For full whale analysis, use the 📊 Token Details button first."
+            # Show loading message
+            await query.edit_message_text("🐋 Analyzing whale activity...")
             
-            # Create back button
-            back_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("← Back to Alert", callback_data=f"back_to_alert_{network}_{contract}")]
-            ])
+            if self.whale_tracker:
+                # Get whale analysis (same logic as token analysis)
+                whale_data = await self.whale_tracker.analyze_whales(
+                    session.current_network,
+                    session.current_contract,
+                    session.token_data
+                )
+                
+                if whale_data:
+                    response = self.whale_tracker.format_whale_response(
+                        whale_data, session.current_token
+                    )
+                else:
+                    response = (
+                        f"🐋 **Whale Tracker: {session.current_token}**\n\n"
+                        "❌ Unable to analyze whale activity.\n\n"
+                        "This could mean:\n"
+                        "• No recent large transactions\n"
+                        "• Limited trading history\n"
+                        "• Data temporarily unavailable\n\n"
+                        "Try again later for updated analysis."
+                    )
+            else:
+                response = (
+                    f"🐋 **Whale Tracker: {session.current_token}**\n\n"
+                    "⚠️ Whale tracking system is currently unavailable.\n"
+                    "Please try again later."
+                )
             
-            await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+            # Show buttons with Whale Tracker hidden (same as token analysis)
+            buttons = self.create_main_buttons(hide_button='whale_tracker', show_back=True)
+            await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
             
             deletion_time = 25 * 60
-            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             
         except Exception as e:
-            logger.error(f"Error handling alert whale button: {e}")
-            await query.edit_message_text("❌ Error with whale tracker. Please try again.")
+            logger.error(f"Error in whale analysis: {e}")
+            await query.edit_message_text(
+                "❌ Error analyzing whale activity. Please try again.",
+                parse_mode='Markdown'
+            )
     
     async def handle_alert_balz_button(self, query, callback_data: str):
         """Handle alert BALZ button press"""
@@ -1612,36 +1708,74 @@ class ButtonHandler:
             network = alert_context['network']
             symbol = alert_context['symbol']
             
-            # Store in session for consistent access pattern
+            token_data = self._get_moonshot_token_data(contract, network, symbol)
+            
+            if not token_data:
+                # Fallback: Get token data for BALZ analysis using API
+                token_data = await self.api_client.get_token_info(network, contract)
+                if not token_data:
+                    await query.edit_message_text("❌ Unable to fetch token data for BALZ analysis.")
+                    return
+            
+            # Store in session for consistent access pattern (same as token analysis)
             session.current_contract = contract
             session.current_network = network
-            session.current_token = symbol
+            session.current_token = token_data.symbol
+            session.token_data = token_data
             
-            # Get token data for BALZ analysis using session properties
-            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-            if not token_data:
-                await query.edit_message_text("❌ Unable to fetch token data for BALZ analysis.")
-                return
+            # Show loading message
+            await query.edit_message_text("⚖️ Analyzing BALZ classification...")
             
-            session.current_token_data = token_data
+            # Handle token data for classification (same logic as token analysis)
+            from src.api.geckoterminal_client import TokenData
+            if isinstance(token_data, dict):
+                # Create TokenData from dict
+                token_obj = TokenData(
+                    symbol=token_data.get('symbol', 'UNKNOWN'),
+                    name=token_data.get('name', 'Unknown'),
+                    contract_address=token_data.get('contract_address', ''),
+                    network=token_data.get('network', ''),
+                    price_usd=token_data.get('price_usd', 0),
+                    market_cap_usd=token_data.get('market_cap_usd', 0),
+                    fdv_usd=token_data.get('fdv_usd', 0),
+                    volume_24h=token_data.get('volume_24h', 0),
+                    total_supply=token_data.get('total_supply', '0'),
+                    liquidity_usd=token_data.get('liquidity_usd', 0),
+                    primary_dex=token_data.get('primary_dex', 'Unknown'),
+                    price_change_24h=token_data.get('price_change_24h', 0),
+                    price_change_1h=token_data.get('price_change_1h', 0),
+                    price_change_5m=token_data.get('price_change_5m', 0),
+                    pool_address=token_data.get('pool_address')
+                )
+                classification = self.reasoning_engine.classify_token(token_obj)
+            else:
+                # token_data is already a TokenData object, use it directly
+                classification = self.reasoning_engine.classify_token(token_data)
             
-            # Generate BALZ classification
-            classification = self.reasoning_engine.classify_token(token_data)
-            response = self._format_balz_response(classification, session.current_token)
+            # Generate response (same as token analysis)
+            if self.response_generator:
+                response = await self.response_generator.generate_balz_response(
+                    classification, token_data
+                )
+            else:
+                # Fallback response if no OpenAI
+                response = self._generate_fallback_balz_response(classification, token_data)
             
-            # Create back button
-            back_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("← Back to Alert", callback_data=f"back_to_alert_{network}_{contract}")]
-            ])
-            
-            await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+            # Show buttons with BALZ Rank hidden (same as token analysis)
+            buttons = self.create_main_buttons(hide_button='balz_rank', show_back=True)
+            await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
             
             deletion_time = 25 * 60
-            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
+            
+            logger.info(f"BALZ classification complete: {classification.category.value} for {session.current_token}")
             
         except Exception as e:
-            logger.error(f"Error handling alert BALZ button: {e}")
-            await query.edit_message_text("❌ Error generating BALZ analysis. Please try again.")
+            logger.error(f"Error generating BALZ analysis: {e}")
+            await query.edit_message_text(
+                "❌ Error generating BALZ analysis. Please try again.",
+                parse_mode='Markdown'
+            )
     
     async def handle_back_to_alert_button(self, query, callback_data: str):
         """Handle back to alert button press"""
