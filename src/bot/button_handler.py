@@ -1545,7 +1545,7 @@ class ButtonHandler:
             
             # Create back button
             back_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("← Back to Alert", callback_data="back_to_alert")]
+                [InlineKeyboardButton("← Back to Alert", callback_data=f"back_to_alert_{network}_{contract}")]
             ])
             
             await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
@@ -1583,7 +1583,7 @@ class ButtonHandler:
             
             # Create back button
             back_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("← Back to Alert", callback_data="back_to_alert")]
+                [InlineKeyboardButton("← Back to Alert", callback_data=f"back_to_alert_{network}_{contract}")]
             ])
             
             await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
@@ -1629,7 +1629,7 @@ class ButtonHandler:
             
             # Create back button
             back_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("← Back to Alert", callback_data="back_to_alert")]
+                [InlineKeyboardButton("← Back to Alert", callback_data=f"back_to_alert_{network}_{contract}")]
             ])
             
             await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
