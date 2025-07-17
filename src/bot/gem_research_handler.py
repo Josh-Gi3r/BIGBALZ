@@ -574,10 +574,16 @@ DYOR: This ain't financial advice"""
             # Filter by liquidity
             filtered_pools = self._filter_pools_by_liquidity(pools, criteria.liquidity)
             logger.info(f"After liquidity filter ({criteria.liquidity}): {len(filtered_pools)} pools")
+            if len(filtered_pools) > 0:
+                sample_liquidity = filtered_pools[0].get('attributes', {}).get('reserve_in_usd', 0)
+                logger.info(f"Sample pool liquidity: ${float(sample_liquidity):,.0f}")
             
             # Filter by market cap
             final_pools = self._filter_pools_by_market_cap(filtered_pools, criteria.mcap)
             logger.info(f"After market cap filter ({criteria.mcap}): {len(final_pools)} pools")
+            if len(final_pools) > 0:
+                sample_mcap = final_pools[0].get('attributes', {}).get('market_cap_usd', 0)
+                logger.info(f"Sample pool market cap: ${float(sample_mcap):,.0f}")
             
             final_pools.sort(key=lambda p: float(p.get('attributes', {}).get('reserve_in_usd', 0)), reverse=True)
             
@@ -595,13 +601,13 @@ DYOR: This ain't financial advice"""
             attrs = pool.get('attributes', {})
             reserve_usd = float(attrs.get('reserve_in_usd', 0))
             
-            if liquidity == '10_50' and 1000 <= reserve_usd <= 15000:  # Covers most pools
+            if liquidity == '10_50' and 10000 <= reserve_usd <= 50000:  # $10K-$50K
                 filtered_pools.append(pool)
-            elif liquidity == '50_250' and 5000 <= reserve_usd <= 50000:  # Mid-range pools
+            elif liquidity == '50_250' and 50000 <= reserve_usd <= 250000:  # $50K-$250K
                 filtered_pools.append(pool)
-            elif liquidity == '250_1000' and 15000 <= reserve_usd <= 150000:  # Higher liquidity
+            elif liquidity == '250_1000' and 250000 <= reserve_usd <= 1000000:  # $250K-$1M
                 filtered_pools.append(pool)
-            elif liquidity == '1000_plus' and reserve_usd >= 50000:  # Top tier pools
+            elif liquidity == '1000_plus' and reserve_usd >= 1000000:  # $1M+
                 filtered_pools.append(pool)
         
         return filtered_pools
@@ -639,11 +645,11 @@ DYOR: This ain't financial advice"""
             try:
                 market_cap = float(market_cap_usd)
                 
-                if mcap == 'micro' and market_cap < 100000000:  # Under 100M (was 1M)
+                if mcap == 'micro' and market_cap < 1000000:  # Under $1M
                     filtered_pools.append(pool)
-                elif mcap == 'small' and 100000000 <= market_cap <= 1000000000:  # 100M-1B (was 1M-10M)
+                elif mcap == 'small' and 1000000 <= market_cap <= 10000000:  # $1M-$10M
                     filtered_pools.append(pool)
-                elif mcap == 'mid' and 1000000000 <= market_cap <= 10000000000:  # 1B-10B (was 10M-50M)
+                elif mcap == 'mid' and 10000000 <= market_cap <= 50000000:  # $10M-$50M
                     filtered_pools.append(pool)
                 
                 logger.debug(f"Market cap filter: {attrs.get('base_token_symbol', 'UNKNOWN')} has ${market_cap:,.0f} market cap, looking for {mcap} cap")
@@ -778,14 +784,14 @@ DYOR: This ain't financial advice"""
             session.timestamp = time.time()
             
             if age == 'last_48':
-                logger.info(f"Fetching new pools for network: {session.criteria.network}")
+                logger.info(f"🔍 Gathering fresh pools from {session.criteria.network.upper()}...")
                 session.new_pools_list = await self.api_client.get_new_pools_paginated(
                     session.criteria.network, max_pools=1000
                 )
-                logger.info(f"Fetched {len(session.new_pools_list)} new pools")
+                logger.info(f"✅ Analyzed {len(session.new_pools_list)} pools for gems")
                 
             elif age == 'older_2_days':
-                logger.info(f"Fetching established pools for network: {session.criteria.network}")
+                logger.info(f"🔍 Gathering established pools from {session.criteria.network.upper()}...")
                 
                 new_pools = await self.api_client.get_new_pools_paginated(
                     session.criteria.network, max_pools=1000
@@ -807,7 +813,7 @@ DYOR: This ain't financial advice"""
                         older_pools.append(pool)
                 
                 session.new_pools_list = older_pools
-                logger.info(f"Fetched {len(older_pools)} older pools (excluded {len(new_pool_addresses)} new pools)")
+                logger.info(f"✅ Analyzed {len(older_pools)} established pools (excluded {len(new_pool_addresses)} fresh pools)")
             
         except Exception as e:
             logger.error(f"Error handling age selection: {e}")
