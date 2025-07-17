@@ -724,6 +724,9 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+        
+        deletion_time = 25 * 60
+        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_prev_moonshot(self, query):
         """Handle previous moonshot navigation"""
@@ -773,6 +776,9 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+        
+        deletion_time = 25 * 60
+        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_next_rug(self, query):
         """Handle next rug navigation"""
@@ -822,6 +828,9 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+        
+        deletion_time = 25 * 60
+        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_prev_rug(self, query):
         """Handle previous rug navigation"""
@@ -871,6 +880,9 @@ class ButtonHandler:
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+        
+        deletion_time = 25 * 60
+        await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
     
     async def _handle_view_moonshots(self, query):
         """Handle view moonshots from status report"""
@@ -1441,6 +1453,9 @@ class ButtonHandler:
             
             await query.edit_message_text(overview, reply_markup=buttons, parse_mode='Markdown')
             
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
+            
         except Exception as e:
             logger.error(f"Error handling alert analyze button: {e}")
             await query.edit_message_text("❌ Error analyzing token. Please try again.")
@@ -1476,6 +1491,9 @@ class ButtonHandler:
             
             await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
             
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
+            
         except Exception as e:
             logger.error(f"Error handling alert socials button: {e}")
             await query.edit_message_text("❌ Error fetching social data. Please try again.")
@@ -1503,6 +1521,9 @@ class ButtonHandler:
             ])
             
             await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
+            
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
             
         except Exception as e:
             logger.error(f"Error handling alert whale button: {e}")
@@ -1540,6 +1561,9 @@ class ButtonHandler:
             
             await query.edit_message_text(response, reply_markup=back_button, parse_mode='Markdown')
             
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
+            
         except Exception as e:
             logger.error(f"Error handling alert BALZ button: {e}")
             await query.edit_message_text("❌ Error generating BALZ analysis. Please try again.")
@@ -1573,6 +1597,9 @@ class ButtonHandler:
             message = f"🔄 **Back to {alert_type.title()} Alert**\n\n**{symbol}** - Use the buttons below to analyze this token."
             
             await query.edit_message_text(message, reply_markup=buttons, parse_mode='Markdown')
+            
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(chat_id, query.message.message_id, deletion_time)
             
         except Exception as e:
             logger.error(f"Error handling back to alert button: {e}")
