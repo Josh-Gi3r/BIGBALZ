@@ -591,13 +591,13 @@ DYOR: This ain't financial advice"""
             attrs = pool.get('attributes', {})
             reserve_usd = float(attrs.get('reserve_in_usd', 0))
             
-            if liquidity == '10_50' and 10000 <= reserve_usd <= 50000:
+            if liquidity == '10_50' and 1000 <= reserve_usd <= 15000:  # Covers most pools
                 filtered_pools.append(pool)
-            elif liquidity == '50_250' and 50000 <= reserve_usd <= 250000:
+            elif liquidity == '50_250' and 5000 <= reserve_usd <= 50000:  # Mid-range pools
                 filtered_pools.append(pool)
-            elif liquidity == '250_1000' and 250000 <= reserve_usd <= 1000000:
+            elif liquidity == '250_1000' and 15000 <= reserve_usd <= 150000:  # Higher liquidity
                 filtered_pools.append(pool)
-            elif liquidity == '1000_plus' and reserve_usd >= 1000000:
+            elif liquidity == '1000_plus' and reserve_usd >= 50000:  # Top tier pools
                 filtered_pools.append(pool)
         
         return filtered_pools
@@ -620,12 +620,14 @@ DYOR: This ain't financial advice"""
                     if price > 0 and total_supply > 0:
                         market_cap_usd = price * total_supply
                         attrs['market_cap_usd'] = str(market_cap_usd)
-                        logger.debug(f"Calculated market cap: ${market_cap_usd:,.0f} for token")
+                        logger.info(f"✅ Calculated market cap: ${market_cap_usd:,.0f} for {attrs.get('base_token_symbol', 'UNKNOWN')} (price: ${price:.8f}, supply: {total_supply:,.0f})")
                     else:
+                        logger.warning(f"❌ Cannot calculate market cap for {attrs.get('base_token_symbol', 'UNKNOWN')}: price={price}, supply={total_supply}, token_data_keys={list(token_data.keys())}")
                         if mcap == 'micro':
                             filtered_pools.append(pool)
                         continue
-                except (ValueError, TypeError, AttributeError):
+                except (ValueError, TypeError, AttributeError) as e:
+                    logger.warning(f"❌ Market cap calculation error for {attrs.get('base_token_symbol', 'UNKNOWN')}: {e}")
                     if mcap == 'micro':
                         filtered_pools.append(pool)
                     continue
@@ -633,14 +635,17 @@ DYOR: This ain't financial advice"""
             try:
                 market_cap = float(market_cap_usd)
                 
-                if mcap == 'micro' and market_cap < 1000000:
+                if mcap == 'micro' and market_cap < 100000000:  # Under 100M (was 1M)
                     filtered_pools.append(pool)
-                elif mcap == 'small' and 1000000 <= market_cap <= 10000000:
+                elif mcap == 'small' and 100000000 <= market_cap <= 1000000000:  # 100M-1B (was 1M-10M)
                     filtered_pools.append(pool)
-                elif mcap == 'mid' and 10000000 <= market_cap <= 50000000:
+                elif mcap == 'mid' and 1000000000 <= market_cap <= 10000000000:  # 1B-10B (was 10M-50M)
                     filtered_pools.append(pool)
+                
+                logger.debug(f"Market cap filter: {attrs.get('base_token_symbol', 'UNKNOWN')} has ${market_cap:,.0f} market cap, looking for {mcap} cap")
                     
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                logger.warning(f"❌ Market cap parsing error for {attrs.get('base_token_symbol', 'UNKNOWN')}: {e}")
                 if mcap == 'micro':
                     filtered_pools.append(pool)
                 continue

@@ -495,30 +495,66 @@ class GeckoTerminalClient:
                 if item.get('type') == 'token':
                     token_lookup[item.get('id')] = item.get('attributes', {})
             
-            # Enrich pool data with token information
+            # Extract token addresses for batch lookup
+            token_addresses = []
+            for pool in pools:
+                relationships = pool.get('relationships', {})
+                base_token_rel = relationships.get('base_token', {})
+                base_token_id = base_token_rel.get('data', {}).get('id')
+                if base_token_id:
+                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
+                    token_addresses.append(address)
+            
+            complete_token_data = await self.get_tokens_batch(network, token_addresses)
+            logger.info(f"Batch token enrichment: {len(complete_token_data)} tokens enriched from {len(token_addresses)} addresses")
+            
+            # Enrich pool data with complete token information
             enriched_pools = []
             for pool in pools:
-                pool_attrs = pool.get('attributes', {})
                 relationships = pool.get('relationships', {})
-                
                 base_token_rel = relationships.get('base_token', {})
                 base_token_id = base_token_rel.get('data', {}).get('id')
                 
-                if base_token_id and base_token_id in token_lookup:
-                    token_data = token_lookup[base_token_id]
+                enriched_pool = pool.copy()
+                enriched_attrs = enriched_pool.get('attributes', {}).copy()
+                enriched_attrs['network'] = network
+                
+                if base_token_id:
+                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
+                    complete_token = complete_token_data.get(address, {})
                     
-                    enriched_pool = pool.copy()
-                    enriched_attrs = enriched_pool.get('attributes', {}).copy()
-                    
-                    enriched_attrs['base_token_symbol'] = token_data.get('symbol', 'UNKNOWN')
-                    enriched_attrs['network'] = network  # Set network explicitly
-                    enriched_attrs['market_cap_usd'] = token_data.get('market_cap_usd')
-                    enriched_attrs['fdv_usd'] = token_data.get('fdv_usd')
-                    
-                    enriched_pool['_token_data'] = token_data
-                    
-                    enriched_pool['attributes'] = enriched_attrs
-                    enriched_pools.append(enriched_pool)
+                    if complete_token:
+                        enriched_attrs['base_token_symbol'] = complete_token.get('symbol', 'UNKNOWN')
+                        
+                        api_market_cap = complete_token.get('market_cap_usd')
+                        if api_market_cap and api_market_cap != 0:
+                            enriched_attrs['market_cap_usd'] = api_market_cap
+                        else:
+                            price_usd = complete_token.get('price_usd')
+                            total_supply = complete_token.get('total_supply')
+                            
+                            if price_usd is not None and total_supply is not None:
+                                try:
+                                    price = float(price_usd)
+                                    supply = float(total_supply)
+                                    if price > 0 and supply > 0:
+                                        calculated_mcap = price * supply
+                                        enriched_attrs['market_cap_usd'] = str(calculated_mcap)
+                                        complete_token['market_cap_usd'] = str(calculated_mcap)
+                                except (ValueError, TypeError) as e:
+                                    logger.warning(f"Error calculating market cap for {complete_token.get('symbol', 'UNKNOWN')}: {e}")
+                        
+                        enriched_attrs['fdv_usd'] = complete_token.get('fdv_usd')
+                        enriched_pool['_token_data'] = complete_token
+                    else:
+                        enriched_attrs['base_token_symbol'] = 'UNKNOWN'
+                        enriched_pool['_token_data'] = {}
+                else:
+                    enriched_attrs['base_token_symbol'] = 'UNKNOWN'
+                    enriched_pool['_token_data'] = {}
+                
+                enriched_pool['attributes'] = enriched_attrs
+                enriched_pools.append(enriched_pool)
             
             all_pools.extend(enriched_pools)
             
@@ -603,32 +639,69 @@ class GeckoTerminalClient:
                 if item.get('type') == 'token':
                     token_lookup[item.get('id')] = item.get('attributes', {})
             
-            # Enrich pool data with token information
+            # Extract token addresses for batch lookup
+            token_addresses = []
+            for pool in pools:
+                relationships = pool.get('relationships', {})
+                base_token_rel = relationships.get('base_token', {})
+                base_token_id = base_token_rel.get('data', {}).get('id')
+                if base_token_id:
+                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
+                    token_addresses.append(address)
+            
+            complete_token_data = await self.get_tokens_batch(network, token_addresses)
+            logger.info(f"Batch token enrichment: {len(complete_token_data)} tokens enriched from {len(token_addresses)} addresses")
+            
+            # Enrich pool data with complete token information
             enriched_pools = []
             for pool in pools:
                 relationships = pool.get('relationships', {})
-                
                 base_token_rel = relationships.get('base_token', {})
                 base_token_id = base_token_rel.get('data', {}).get('id')
                 
-                if base_token_id and base_token_id in token_lookup:
-                    token_data = token_lookup[base_token_id]
+                enriched_pool = pool.copy()
+                enriched_attrs = enriched_pool.get('attributes', {}).copy()
+                enriched_attrs['network'] = network
+                
+                if base_token_id:
+                    address = base_token_id.split('_')[-1] if '_' in base_token_id else base_token_id
+                    complete_token = complete_token_data.get(address, {})
                     
-                    enriched_pool = pool.copy()
-                    enriched_attrs = enriched_pool.get('attributes', {}).copy()
-                    
-                    enriched_attrs['base_token_symbol'] = token_data.get('symbol', 'UNKNOWN')
-                    enriched_attrs['network'] = network  # Set network explicitly
-                    
-                    if not enriched_attrs.get('market_cap_usd'):
-                        enriched_attrs['market_cap_usd'] = token_data.get('market_cap_usd')
-                    if not enriched_attrs.get('fdv_usd'):
-                        enriched_attrs['fdv_usd'] = token_data.get('fdv_usd')
-                    
-                    enriched_pool['attributes'] = enriched_attrs
-                    enriched_pools.append(enriched_pool)
+                    if complete_token:
+                        enriched_attrs['base_token_symbol'] = complete_token.get('symbol', 'UNKNOWN')
+                        
+                        if not enriched_attrs.get('market_cap_usd'):
+                            api_market_cap = complete_token.get('market_cap_usd')
+                            if api_market_cap and api_market_cap != 0:
+                                enriched_attrs['market_cap_usd'] = api_market_cap
+                            else:
+                                price_usd = complete_token.get('price_usd')
+                                total_supply = complete_token.get('total_supply')
+                                
+                                if price_usd is not None and total_supply is not None:
+                                    try:
+                                        price = float(price_usd)
+                                        supply = float(total_supply)
+                                        if price > 0 and supply > 0:
+                                            calculated_mcap = price * supply
+                                            enriched_attrs['market_cap_usd'] = str(calculated_mcap)
+                                            complete_token['market_cap_usd'] = str(calculated_mcap)
+                                    except (ValueError, TypeError) as e:
+                                        logger.warning(f"Error calculating market cap for {complete_token.get('symbol', 'UNKNOWN')}: {e}")
+                        
+                        if not enriched_attrs.get('fdv_usd'):
+                            enriched_attrs['fdv_usd'] = complete_token.get('fdv_usd')
+                        
+                        enriched_pool['_token_data'] = complete_token
+                    else:
+                        enriched_attrs['base_token_symbol'] = 'UNKNOWN'
+                        enriched_pool['_token_data'] = {}
                 else:
-                    enriched_pools.append(pool)
+                    enriched_attrs['base_token_symbol'] = 'UNKNOWN'
+                    enriched_pool['_token_data'] = {}
+                
+                enriched_pool['attributes'] = enriched_attrs
+                enriched_pools.append(enriched_pool)
             
             all_pools.extend(enriched_pools)
             
@@ -662,6 +735,40 @@ class GeckoTerminalClient:
             return []
             
         return data.get('data', {}).get('attributes', {}).get('ohlcv_list', [])
+    
+    async def get_tokens_batch(self, network: str, addresses: List[str]) -> Dict[str, Dict]:
+        """
+        Get complete token information for multiple addresses in batch
+        
+        Args:
+            network: Network identifier
+            addresses: List of token addresses (max 30 per request)
+            
+        Returns:
+            Dictionary mapping address to token attributes
+        """
+        if not addresses:
+            return {}
+        
+        token_data = {}
+        for i in range(0, len(addresses), 30):
+            batch = addresses[i:i+30]
+            addresses_str = ','.join(batch)
+            
+            url = f"{self.BASE_URL}/networks/{network}/tokens/multi/{addresses_str}"
+            data = await self._make_request(url, priority=2)
+            
+            if data and data.get('data'):
+                for token in data['data']:
+                    attrs = token.get('attributes', {})
+                    address = attrs.get('address')
+                    if address:
+                        logger.debug(f"Token {address}: market_cap_usd={attrs.get('market_cap_usd')}, total_supply={attrs.get('total_supply')}")
+                        token_data[address] = attrs
+            else:
+                logger.warning(f"No token data returned for batch: {addresses_str}")
+        
+        return token_data
     
     def get_rate_limit_status(self) -> Dict[str, Any]:
         """Get current rate limit status"""
