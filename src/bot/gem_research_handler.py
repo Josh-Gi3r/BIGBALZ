@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from ..algorithms.gem_risk_scoring import GEM_RISK_SCORING
+
 from src.api.geckoterminal_client import TokenData
 
 logger = logging.getLogger(__name__)
@@ -863,40 +865,40 @@ Risk Factors:
     def _calculate_risk_score(self, token_data: TokenData) -> float:
         """Calculate risk score from 0-10 (10 = lowest risk)"""
         score = 0
+        scoring_config = GEM_RISK_SCORING
         
         # Liquidity factor (0-3 points)
-        if token_data.liquidity_usd >= 1000000:
-            score += 3
-        elif token_data.liquidity_usd >= 300000:
-            score += 2
-        elif token_data.liquidity_usd >= 100000:
-            score += 1
+        for tier in scoring_config['liquidity_tiers']:
+            if token_data.liquidity_usd >= tier['min_value']:
+                score += tier['points']
+                break
         
         # Volume factor (0-2 points)
-        if token_data.volume_24h >= 100000:
-            score += 2
-        elif token_data.volume_24h >= 10000:
-            score += 1
+        for tier in scoring_config['volume_tiers']:
+            if token_data.volume_24h >= tier['min_value']:
+                score += tier['points']
+                break
         
         # Market cap factor (0-2 points)
-        if token_data.market_cap_usd >= 10000000:
-            score += 2
-        elif token_data.market_cap_usd >= 1000000:
-            score += 1
+        for tier in scoring_config['market_cap_tiers']:
+            if token_data.market_cap_usd >= tier['min_value']:
+                score += tier['points']
+                break
         
         # FDV/MCap ratio factor (0-2 points)
         if token_data.fdv_usd > 0 and token_data.market_cap_usd > 0:
             ratio = token_data.fdv_usd / token_data.market_cap_usd
-            if ratio < 2:
-                score += 2
-            elif ratio < 5:
-                score += 1
+            for tier in scoring_config['fdv_ratio_tiers']:
+                if ratio <= tier['max_ratio']:
+                    score += tier['points']
+                    break
         
         # Price stability factor (0-1 point)
-        if abs(token_data.price_change_24h) < 20:
-            score += 1
+        stability_config = scoring_config['price_stability']
+        if abs(token_data.price_change_24h) < stability_config['max_change_percent']:
+            score += stability_config['points']
         
-        return min(score, 10)
+        return min(score, scoring_config['max_score'])
     
     def clear_session(self, chat_id: int, user_id: int):
         """Clear gem research session"""

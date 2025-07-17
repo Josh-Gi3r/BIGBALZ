@@ -12,6 +12,17 @@ from collections import defaultdict
 import time
 import random
 
+from ..api.geckoterminal_client import GeckoTerminalClient
+from ..bot.telegram_handler import TelegramBotHandler
+from ..algorithms.moonshot_criteria import MOONSHOT_CRITERIA_LIST, TIER_CONFIG
+from ..algorithms.rug_detection import (
+    RUG_LIQUIDITY_DRAIN_CRITERIA, 
+    RUG_PRICE_CRASH_CRITERIA, 
+    RUG_VOLUME_DUMP_CRITERIA,
+    MAX_HISTORICAL_DATA_AGE
+)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -410,8 +421,8 @@ class BackgroundMonitor:
         if not historical_record:
             return None
             
-        # Skip if the data is too old (more than 120 seconds)
-        if current_time - historical_record['timestamp'] > 120:
+        # Skip if the data is too old (more than threshold seconds)
+        if current_time - historical_record['timestamp'] > MAX_HISTORICAL_DATA_AGE:
             return None
         
         # Calculate changes
@@ -433,10 +444,11 @@ class BackgroundMonitor:
         
         # Check rug criteria in order: Liquidity → Price → Volume
         
-        # 1. LIQUIDITY DRAIN: 40%+ drop with >$10k initial liquidity AND final liquidity <$1k
-        if (liquidity_change >= 40 and 
-            historical_record['liquidity'] >= 10000 and 
-            current_liquidity < 1000):
+        # 1. LIQUIDITY DRAIN: Check against criteria
+        liquidity_criteria = RUG_LIQUIDITY_DRAIN_CRITERIA
+        if (liquidity_change >= liquidity_criteria['min_liquidity_drop_percent'] and 
+            historical_record['liquidity'] >= liquidity_criteria['min_initial_liquidity'] and 
+            current_liquidity < liquidity_criteria['max_final_liquidity']):
             logger.info(f"RUG DETECTED (LIQUIDITY_DRAIN): {current_data['symbol']} - {liquidity_change:.1f}% liquidity drop, final liquidity: ${current_liquidity:.0f}")
             return RugAlert(
                 token_symbol=current_data['symbol'],
@@ -448,11 +460,12 @@ class BackgroundMonitor:
                 final_liquidity=current_liquidity,
                 final_volume_1h=current_volume_1h,
                 timestamp=datetime.utcnow(),
-                rug_type="LIQUIDITY_DRAIN"
+                rug_type=liquidity_criteria['rug_type']
             )
         
-        # 2. PRICE CRASH: 60%+ price drop
-        if price_change >= 60:
+        # 2. PRICE CRASH: Check against criteria
+        price_criteria = RUG_PRICE_CRASH_CRITERIA
+        if price_change >= price_criteria['min_price_drop_percent']:
             logger.info(f"RUG DETECTED (PRICE_CRASH): {current_data['symbol']} - {price_change:.1f}% price drop")
             return RugAlert(
                 token_symbol=current_data['symbol'],
@@ -464,12 +477,14 @@ class BackgroundMonitor:
                 final_liquidity=current_liquidity,
                 final_volume_1h=current_volume_1h,
                 timestamp=datetime.utcnow(),
-                rug_type="PRICE_CRASH"
+                rug_type=price_criteria['rug_type']
             )
         
-        # 3. VOLUME DUMP: 500%+ volume spike AND 50%+ price drop with >$1k previous volume
-        if (volume_change >= 500 and price_change >= 50 and 
-            historical_volume_1h >= 1000):
+        # 3. VOLUME DUMP: Check against criteria
+        volume_criteria = RUG_VOLUME_DUMP_CRITERIA
+        if (volume_change >= volume_criteria['min_volume_spike_percent'] and 
+            price_change >= volume_criteria['min_price_drop_percent'] and 
+            historical_volume_1h >= volume_criteria['min_previous_volume']):
             logger.info(f"RUG DETECTED (VOLUME_DUMP): {current_data['symbol']} - {volume_change:.1f}% volume spike, {price_change:.1f}% price drop")
             return RugAlert(
                 token_symbol=current_data['symbol'],
@@ -481,7 +496,7 @@ class BackgroundMonitor:
                 final_liquidity=current_liquidity,
                 final_volume_1h=current_volume_1h,
                 timestamp=datetime.utcnow(),
-                rug_type="VOLUME_DUMP"
+                rug_type=volume_criteria['rug_type']
             )
         
         return None
@@ -954,63 +969,28 @@ class BackgroundMonitor:
                 best_price_change = change
                 best_timeframe = timeframe
         
-        # STRICTER Moonshot Criteria - Check against all timeframes
-        # 100x Moonshot: $10k+ liquidity, +75% in ANY timeframe, $15k+ volume, 75+ txs, $50k+ market cap
-        if (liquidity >= 10000 and best_price_change >= 75 and 
-            volume_24h >= 15000 and tx_count_24h >= 75 and
-            market_cap >= 50000):
-            logger.info(f"POTENTIAL 100X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-            alert = MoonshotAlert(
-                token_symbol=token_symbol,
-                contract=contract,
-                network=network,
-                tier="POTENTIAL 100X",
-                price_change_percent=best_price_change,
-                volume_24h=volume_24h,
-                liquidity=liquidity,
-                transaction_count=tx_count_24h,
-                timestamp=datetime.utcnow()
-            )
-            logger.debug(f"Created 100X moonshot alert for {contract} at {alert.timestamp}")
-            return alert
-        
-        # 10x Moonshot: $20k+ liquidity, +30% in ANY timeframe, $30k+ volume, 100+ txs, $100k+ market cap
-        elif (liquidity >= 20000 and best_price_change >= 30 and 
-              volume_24h >= 30000 and tx_count_24h >= 100 and
-              market_cap >= 100000):
-            logger.info(f"POTENTIAL 10X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-            alert = MoonshotAlert(
-                token_symbol=token_symbol,
-                contract=contract,
-                network=network,
-                tier="POTENTIAL 10X",
-                price_change_percent=best_price_change,
-                volume_24h=volume_24h,
-                liquidity=liquidity,
-                transaction_count=tx_count_24h,
-                timestamp=datetime.utcnow()
-            )
-            logger.debug(f"Created 10X moonshot alert for {contract} at {alert.timestamp}")
-            return alert
-        
-        # 2x Moonshot: $75k+ liquidity, +20% in ANY timeframe, $75k+ volume, 150+ txs, $500k+ market cap
-        elif (liquidity >= 75000 and best_price_change >= 20 and 
-              volume_24h >= 75000 and tx_count_24h >= 150 and
-              market_cap >= 500000):
-            logger.info(f"POTENTIAL 2X MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
-            alert = MoonshotAlert(
-                token_symbol=token_symbol,
-                contract=contract,
-                network=network,
-                tier="POTENTIAL 2X",
-                price_change_percent=best_price_change,
-                volume_24h=volume_24h,
-                liquidity=liquidity,
-                transaction_count=tx_count_24h,
-                timestamp=datetime.utcnow()
-            )
-            logger.debug(f"Created 2X moonshot alert for {contract} at {alert.timestamp}")
-            return alert
+        # Check moonshot criteria using algorithm definitions
+        for criteria in MOONSHOT_CRITERIA_LIST:
+            if (liquidity >= criteria['min_liquidity'] and 
+                best_price_change >= criteria['min_price_change'] and 
+                volume_24h >= criteria['min_volume_24h'] and 
+                tx_count_24h >= criteria['min_tx_count_24h'] and
+                market_cap >= criteria['min_market_cap']):
+                
+                logger.info(f"{criteria['tier']} MOONSHOT DETECTED: {token_symbol} - {best_price_change:.1f}% in {best_timeframe}, MCap: ${market_cap:,.0f}")
+                alert = MoonshotAlert(
+                    token_symbol=token_symbol,
+                    contract=contract,
+                    network=network,
+                    tier=criteria['tier'],
+                    price_change_percent=best_price_change,
+                    volume_24h=volume_24h,
+                    liquidity=liquidity,
+                    transaction_count=tx_count_24h,
+                    timestamp=datetime.utcnow()
+                )
+                logger.debug(f"Created {criteria['tier']} moonshot alert for {contract} at {alert.timestamp}")
+                return alert
         
         return None
     
@@ -1053,14 +1033,7 @@ class BackgroundMonitor:
         }
         network_display = network_names.get(alert.network, alert.network.upper())
         
-        # Tier-specific config
-        tier_config = {
-            "POTENTIAL 100X": {"emoji": "🚀", "timeframe": "5m"},
-            "POTENTIAL 10X": {"emoji": "⚡", "timeframe": "1h"},
-            "POTENTIAL 2X": {"emoji": "💰", "timeframe": "24h"}
-        }
-        
-        config = tier_config.get(alert.tier, {"emoji": "🚀", "timeframe": "5m"})
+        config = TIER_CONFIG.get(alert.tier, {"emoji": "🚀", "timeframe": "5m"})
         
         # Get random savage line
         savage_lines = [

@@ -9,6 +9,12 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 from .geckoterminal_client import GeckoTerminalClient
+
+from ..algorithms.whale_confidence import (
+    WHALE_THRESHOLDS, WHALE_VOLUME_THRESHOLD, CONFIDENCE_SCORING,
+    RISK_LEVELS, RECENT_ACTIVITY_TIMEFRAME
+)
+
 from ..bot.message_formatter import MessageFormatter
 
 logger = logging.getLogger(__name__)
@@ -29,13 +35,7 @@ class WhaleTracker:
         """
         self.api_client = api_client
         
-        # Whale thresholds as percentage of total supply
-        self.whale_thresholds = {
-            'mega_whale': 5.0,    # 5%+ of supply
-            'large_whale': 2.0,   # 2-5% of supply
-            'medium_whale': 1.0,  # 1-2% of supply
-            'small_whale': 0.5    # 0.5-1% of supply
-        }
+        self.whale_thresholds = WHALE_THRESHOLDS
         
     async def analyze_whales(self, network: str, contract: str,
                            token_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -150,7 +150,7 @@ class WhaleTracker:
             percentage = (activity['total_volume'] / total_volume * 100) if total_volume > 0 else 0
             
             # Consider as whale if significant volume
-            if percentage >= 0.5:  # 0.5% of total volume
+            if percentage >= WHALE_VOLUME_THRESHOLD:  # From algorithm file
                 whale_data = {
                     'address': address,
                     'percentage': percentage,
@@ -240,64 +240,69 @@ class WhaleTracker:
         - Recent activity patterns
         - Position concentration
         """
-        score = 5.0  # Start at neutral
+        score = CONFIDENCE_SCORING['base_score']  # Start at neutral from algorithm
         
         # Factor 1: Whale diversity (more whales = better)
         whale_count = whale_data['whale_count']
-        if whale_count >= 10:
-            score += 1.0
-        elif whale_count >= 5:
-            score += 0.5
-        elif whale_count <= 2:
-            score -= 1.0
+        diversity_config = CONFIDENCE_SCORING['whale_diversity']
+        if whale_count >= diversity_config['excellent']['min_count']:
+            score += diversity_config['excellent']['score_bonus']
+        elif whale_count >= diversity_config['good']['min_count']:
+            score += diversity_config['good']['score_bonus']
+        elif whale_count <= diversity_config['poor']['max_count']:
+            score += diversity_config['poor']['score_penalty']
         
         # Factor 2: Total holdings (moderate is best)
         total_percentage = whale_data['total_whale_percentage']
-        if 20 <= total_percentage <= 40:
-            score += 1.0  # Healthy range
-        elif total_percentage < 20:
-            score += 0.5  # Good distribution
-        elif total_percentage > 60:
-            score -= 2.0  # Too concentrated
-        elif total_percentage > 50:
-            score -= 1.0
+        holdings_config = CONFIDENCE_SCORING['holdings_distribution']
+        if holdings_config['healthy_range']['min'] <= total_percentage <= holdings_config['healthy_range']['max']:
+            score += holdings_config['healthy_range']['score_bonus']
+        elif total_percentage <= holdings_config['good_distribution']['max']:
+            score += holdings_config['good_distribution']['score_bonus']
+        elif total_percentage >= holdings_config['too_concentrated_severe']['min']:
+            score += holdings_config['too_concentrated_severe']['score_penalty']
+        elif total_percentage >= holdings_config['too_concentrated_moderate']['min']:
+            score += holdings_config['too_concentrated_moderate']['score_penalty']
         
         # Factor 3: Buy/sell ratio
         buy_sell_ratio = whale_data['buy_sell_ratio']
-        if buy_sell_ratio > 2.0:
-            score += 1.5  # Strong buying
-        elif buy_sell_ratio > 1.5:
-            score += 1.0
-        elif buy_sell_ratio > 1.0:
-            score += 0.5
-        elif buy_sell_ratio < 0.5:
-            score -= 1.5  # Heavy selling
-        elif buy_sell_ratio < 0.75:
-            score -= 1.0
+        ratio_config = CONFIDENCE_SCORING['buy_sell_ratio']
+        if buy_sell_ratio >= ratio_config['strong_buying']['min_ratio']:
+            score += ratio_config['strong_buying']['score_bonus']
+        elif buy_sell_ratio >= ratio_config['moderate_buying']['min_ratio']:
+            score += ratio_config['moderate_buying']['score_bonus']
+        elif buy_sell_ratio >= ratio_config['slight_buying']['min_ratio']:
+            score += ratio_config['slight_buying']['score_bonus']
+        elif buy_sell_ratio <= ratio_config['heavy_selling']['max_ratio']:
+            score += ratio_config['heavy_selling']['score_penalty']
+        elif buy_sell_ratio <= ratio_config['moderate_selling']['max_ratio']:
+            score += ratio_config['moderate_selling']['score_penalty']
         
         # Factor 4: Recent activity
         recent = whale_data['recent_activity']
+        activity_config = CONFIDENCE_SCORING['recent_activity']
         if recent['buy_pressure']:
-            score += 1.0
+            score += activity_config['buy_pressure_bonus']
         elif recent['sell_pressure']:
-            score -= 1.0
+            score += activity_config['sell_pressure_penalty']
         
         # Factor 5: Top whale concentration
         if whale_data['top_whales']:
             top_whale_percentage = whale_data['top_whales'][0]['percentage']
-            if top_whale_percentage > 20:
-                score -= 1.5  # Single whale too dominant
-            elif top_whale_percentage > 15:
-                score -= 0.5
+            concentration_config = CONFIDENCE_SCORING['top_whale_concentration']
+            if top_whale_percentage >= concentration_config['too_dominant_severe']['min_percentage']:
+                score += concentration_config['too_dominant_severe']['score_penalty']
+            elif top_whale_percentage >= concentration_config['too_dominant_moderate']['min_percentage']:
+                score += concentration_config['too_dominant_moderate']['score_penalty']
         
         # Ensure score is within 0-10 range
         return max(0, min(10, score))
     
     def _determine_risk_level(self, confidence_score: float) -> str:
         """Determine risk level based on confidence score"""
-        if confidence_score >= 7:
+        if confidence_score >= RISK_LEVELS['LOW']['min_score']:
             return "LOW"
-        elif confidence_score >= 4:
+        elif confidence_score >= RISK_LEVELS['MEDIUM']['min_score']:
             return "MEDIUM"
         else:
             return "HIGH"
