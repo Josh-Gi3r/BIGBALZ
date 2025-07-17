@@ -83,3 +83,13 @@ yarn-error.log*
 
 # Documentation (contains sensitive planning info)
 docs/
+
+# Development and testing files
+test_*.py
+debug_*.py
+simple_test.py
+verify_*.py
+temp_*.py
+scratch_*.py
+
+# Test artifacts (keep organized tests in tests/ directory)
