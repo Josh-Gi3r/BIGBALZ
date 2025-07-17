@@ -12,6 +12,7 @@ from src.classification.reasoning_engine import ReasoningEngine
 from src.classification.response_generator import ResponseGenerator
 from src.api.whale_tracker import WhaleTracker
 from src.database.session_manager import SessionState
+from src.bot.gem_research_handler import GemCriteria
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +222,14 @@ class ButtonHandler:
             context: Callback context
         """
         query = update.callback_query
-        await query.answer()  # Acknowledge the button press
+        
+        try:
+            await query.answer()  # Acknowledge the button press
+        except Exception as e:
+            if "too old" in str(e).lower() or "timeout" in str(e).lower():
+                logger.warning(f"Callback query timeout: {e}")
+            else:
+                raise e
         
         callback_data = query.data
         chat_id = query.message.chat_id
@@ -1207,6 +1215,10 @@ class ButtonHandler:
         
         gem_handler = self.bot_handler.gem_research_handler
         session = gem_handler.create_or_get_session(chat_id, user_id)
+        
+        if session.criteria is None:
+            session.criteria = GemCriteria(network='', age='', liquidity='', mcap='')
+        
         session.criteria.mcap = mcap
         session.step = 'results'
         

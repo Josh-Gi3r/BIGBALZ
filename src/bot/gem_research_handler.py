@@ -79,7 +79,7 @@ class GemResearchHandler:
         
         # Gem research sessions (chat_id -> GemResearchSession)
         self.research_sessions = {}
-        self.session_ttl = 600  # 10 minutes
+        self.session_ttl = 1800  # 30 minutes (matches 25min auto-delete + buffer)
         
         # Classification mappings
         self.classifications = {
@@ -311,8 +311,8 @@ This affects potential returns - smaller caps can pump harder but carry way more
         }
         
         age_ranges = {
-            'fresh': 'Last 48 hours',
-            'early': '3-7 days old'
+            'last_48': 'Last 48 hours',
+            'older_2_days': '3-7 days old'
         }
         
         liq_ranges = {
@@ -376,7 +376,8 @@ Market conditions:
             self.research_sessions[session_key] = GemResearchSession(
                 chat_id=chat_id,
                 user_id=user_id,
-                step='network'
+                step='network',
+                criteria=GemCriteria(network='', age='', liquidity='', mcap='')
             )
         
         return self.research_sessions[session_key]
