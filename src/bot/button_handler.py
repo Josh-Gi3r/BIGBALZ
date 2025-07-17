@@ -1213,6 +1213,7 @@ class ButtonHandler:
         """Handle gem token details analysis"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
+        user_id = query.from_user.id
         
         parts = callback_data.split('_')
         if len(parts) < 4:
@@ -1221,11 +1222,22 @@ class ButtonHandler:
         network = parts[2]
         contract = '_'.join(parts[3:])
         
-        # Get token data
-        token_data = await self.api_client.get_token_info(network, contract)
+        session = self.session_manager.get_session(chat_id, user_id)
+        if not session:
+            session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
+        
+        # Store in session for consistent access pattern
+        session.current_contract = contract
+        session.current_network = network
+        
+        # Get token data using session properties
+        token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
         if not token_data:
             await query.edit_message_text("❌ Unable to fetch token data")
             return
+        
+        session.current_token = token_data.symbol
+        session.current_token_data = token_data
         
         # Format token overview
         from ..bot.message_formatter import MessageFormatter
@@ -1248,6 +1260,7 @@ class ButtonHandler:
         """Handle gem socials"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
+        user_id = query.from_user.id
         
         parts = callback_data.split('_')
         if len(parts) < 4:
@@ -1256,13 +1269,27 @@ class ButtonHandler:
         network = parts[2]
         contract = '_'.join(parts[3:])
         
-        # Get social data
-        social_data = await self.api_client.get_social_info(network, contract)
+        # Get or create session for consistent access pattern
+        session = self.session_manager.get_session(chat_id, user_id)
+        if not session:
+            session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
+        
+        # Store in session for consistent access pattern
+        session.current_contract = contract
+        session.current_network = network
+        
+        # Get social data using session properties
+        social_data = await self.api_client.get_social_info(session.current_network, session.current_contract)
         
         if social_data:
-            # Get token info for name
-            token_data = await self.api_client.get_token_info(network, contract)
-            token_name = f"{token_data.name} ({token_data.symbol})" if token_data else "Token"
+            # Get token info for name using session properties
+            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
+            if token_data:
+                session.current_token = token_data.symbol
+                session.current_token_data = token_data
+                token_name = f"{token_data.name} ({token_data.symbol})"
+            else:
+                token_name = "Token"
             
             response = self._format_social_response(social_data, token_name)
         else:
@@ -1302,6 +1329,7 @@ class ButtonHandler:
         """Handle gem BALZ rank"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
+        user_id = query.from_user.id
         
         parts = callback_data.split('_')
         if len(parts) < 4:
@@ -1310,19 +1338,29 @@ class ButtonHandler:
         network = parts[2]
         contract = '_'.join(parts[3:])
         
-        # Get token data
-        token_data = await self.api_client.get_token_info(network, contract)
+        # Get or create session for consistent access pattern
+        session = self.session_manager.get_session(chat_id, user_id)
+        if not session:
+            session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
+        
+        # Store in session for consistent access pattern
+        session.current_contract = contract
+        session.current_network = network
+        
+        # Get token data using session properties
+        token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
         if not token_data:
             await query.edit_message_text("❌ Unable to fetch token data")
             return
         
-        # Get session to get criteria
-        user_id = query.from_user.id
-        gem_handler = self.bot_handler.gem_research_handler
-        session = gem_handler.create_or_get_session(chat_id, user_id)
+        session.current_token = token_data.symbol
+        session.current_token_data = token_data
         
-        if session.criteria:
-            message, buttons = gem_handler.format_balz_rank_message(token_data, session.criteria)
+        gem_handler = self.bot_handler.gem_research_handler
+        gem_session = gem_handler.create_or_get_session(chat_id, user_id)
+        
+        if gem_session.criteria:
+            message, buttons = gem_handler.format_balz_rank_message(token_data, gem_session.criteria)
         else:
             # Fallback if no criteria
             from ..bot.gem_research_handler import GemCriteria
@@ -1436,13 +1474,20 @@ class ButtonHandler:
             contract = alert_context['contract']
             network = alert_context['network']
             
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            session.current_token = alert_context['symbol']
+            
             # Get token info and analyze like normal token analysis
             await query.edit_message_text("🔍 Analyzing token from alert...")
             
-            token_data = await self.api_client.get_token_info(network, contract)
+            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
             if not token_data:
                 await query.edit_message_text("❌ Unable to fetch token data. Please try again.")
                 return
+            
+            session.current_token_data = token_data
             
             # Format token overview
             from ..bot.message_formatter import MessageFormatter
@@ -1450,12 +1495,6 @@ class ButtonHandler:
             
             # Create main buttons
             buttons = self.create_token_overview_buttons()
-            
-            # Store in session for button navigation
-            session.current_token = token_data.symbol
-            session.current_contract = contract
-            session.current_network = network
-            session.current_token_data = token_data
             
             await query.edit_message_text(overview, reply_markup=buttons, parse_mode='Markdown')
             
@@ -1481,13 +1520,18 @@ class ButtonHandler:
             network = alert_context['network']
             symbol = alert_context['symbol']
             
-            # Get social data
-            social_data = await self.api_client.get_social_data(network, contract)
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            session.current_token = symbol
+            
+            # Get social data using session properties
+            social_data = await self.api_client.get_social_info(session.current_network, session.current_contract)
             
             if social_data:
-                response = self._format_social_response(social_data, symbol)
+                response = self._format_social_response(social_data, session.current_token)
             else:
-                response = f"📱 **Social Links for {symbol}**\n\n" \
+                response = f"📱 **Social Links for {session.current_token}**\n\n" \
                           "ℹ️ No social information available for this token."
             
             # Create back button
@@ -1515,9 +1559,16 @@ class ButtonHandler:
                 return
             
             alert_context = session.alert_context
+            contract = alert_context['contract']
+            network = alert_context['network']
             symbol = alert_context['symbol']
             
-            response = f"🐋 **Whale Tracker: {symbol}**\n\n" \
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            session.current_token = symbol
+            
+            response = f"🐋 **Whale Tracker: {session.current_token}**\n\n" \
                       "❌ Unable to analyze whale activity for alerts.\n\n" \
                       "For full whale analysis, use the 📊 Token Details button first."
             
@@ -1550,15 +1601,22 @@ class ButtonHandler:
             network = alert_context['network']
             symbol = alert_context['symbol']
             
-            # Get token data for BALZ analysis
-            token_data = await self.api_client.get_token_info(network, contract)
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            session.current_token = symbol
+            
+            # Get token data for BALZ analysis using session properties
+            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
             if not token_data:
                 await query.edit_message_text("❌ Unable to fetch token data for BALZ analysis.")
                 return
             
+            session.current_token_data = token_data
+            
             # Generate BALZ classification
             classification = self.reasoning_engine.classify_token(token_data)
-            response = self._format_balz_response(classification, symbol)
+            response = self._format_balz_response(classification, session.current_token)
             
             # Create back button
             back_button = InlineKeyboardMarkup([
