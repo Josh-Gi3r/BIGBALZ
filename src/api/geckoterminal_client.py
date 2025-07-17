@@ -279,8 +279,13 @@ class GeckoTerminalClient:
                 return None
                 
             attrs = token_data.get('attributes', {})
+            relationships = token_data.get('relationships', {})
             
-            # Need to fetch included pool data for liquidity
+            primary_pool_id = None
+            top_pools = relationships.get('top_pools', {}).get('data', [])
+            if top_pools:
+                primary_pool_id = top_pools[0].get('id')
+            
             included = data.get('included', [])
             primary_pool = None
             
@@ -312,6 +317,13 @@ class GeckoTerminalClient:
             if liquidity == 0:
                 liquidity = safe_float(attrs.get('total_reserve_in_usd'))
             
+            clean_pool_address = None
+            if primary_pool_id:
+                if primary_pool_id.startswith(f"{network}_"):
+                    clean_pool_address = primary_pool_id[len(f"{network}_"):]
+                else:
+                    clean_pool_address = primary_pool_id
+
             return TokenData(
                 symbol=attrs.get('symbol', 'UNKNOWN'),
                 name=attrs.get('name', 'Unknown Token'),
@@ -327,7 +339,7 @@ class GeckoTerminalClient:
                 price_change_24h=safe_float(price_changes.get('h24')),
                 price_change_1h=safe_float(price_changes.get('h1')),
                 price_change_5m=safe_float(price_changes.get('m5')),
-                pool_address=primary_pool.get('id') if primary_pool else None
+                pool_address=clean_pool_address
             )
             
         except Exception as e:

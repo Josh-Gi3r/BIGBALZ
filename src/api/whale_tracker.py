@@ -84,16 +84,20 @@ class WhaleTracker:
             logger.error(f"Error analyzing whales: {e}")
             return None
     
-    def _get_primary_pool_address(self, token_data: Dict[str, Any]) -> Optional[str]:
+    def _get_primary_pool_address(self, token_data: Any) -> Optional[str]:
         """Extract primary pool address from token data"""
-        # Direct pool_address field from TokenData
-        if isinstance(token_data, dict) and 'pool_address' in token_data:
-            return token_data['pool_address']
+        if hasattr(token_data, 'pool_address'):
+            return token_data.pool_address
         
-        # Fallback for other data structures
         if isinstance(token_data, dict):
+            # Direct pool_address field
+            if 'pool_address' in token_data:
+                return token_data['pool_address']
+            
+            # Fallback for other data structures
             if 'primary_pool' in token_data:
                 return token_data['primary_pool']
+            
             # If we have relationships data
             if 'relationships' in token_data:
                 pools = token_data.get('relationships', {}).get('top_pools', {}).get('data', [])
@@ -253,7 +257,7 @@ class WhaleTracker:
             score += diversity_config['poor']['score_penalty']
         
         # Factor 2: Total holdings (moderate is best)
-        total_percentage = whale_data['total_whale_percentage']
+        total_percentage = whale_data['total_percentage']
         holdings_config = CONFIDENCE_SCORING['holdings_distribution']
         if holdings_config['healthy_range']['min'] <= total_percentage <= holdings_config['healthy_range']['max']:
             score += holdings_config['healthy_range']['score_bonus']
