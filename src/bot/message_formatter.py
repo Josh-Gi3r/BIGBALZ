@@ -7,8 +7,8 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from ..utils.validators import ContractValidator
-from ..api.geckoterminal_client import TokenData
+from src.utils.validators import ContractValidator
+from src.api.geckoterminal_client import TokenData
 
 logger = logging.getLogger(__name__)
 

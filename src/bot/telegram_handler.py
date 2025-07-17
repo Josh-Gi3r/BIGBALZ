@@ -426,7 +426,7 @@ I'm here to make our community a great place to hang out, learn, and share ideas
             return
         
         # Import validator
-        from ..utils.validators import ContractValidator
+        from src.utils.validators import ContractValidator
         
         # First check if it's a valid contract address
         is_valid, network, error = ContractValidator.validate_contract(message_text)
@@ -590,7 +590,7 @@ I'm here to make our community a great place to hang out, learn, and share ideas
             )
             
             # Format token overview message
-            from ..bot.message_formatter import MessageFormatter
+            from src.bot.message_formatter import MessageFormatter
             overview_message = MessageFormatter.format_token_overview(token_data)
             
             # Create buttons
