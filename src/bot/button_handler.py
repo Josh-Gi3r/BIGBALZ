@@ -394,6 +394,9 @@ class ButtonHandler:
             buttons = self.create_main_buttons(hide_button='balz_rank', show_back=True)
             await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
             
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
+            
             logger.info(f"BALZ classification complete: {classification.category.value} for {session.current_token}")
             
         except Exception as e:
@@ -444,6 +447,9 @@ class ButtonHandler:
             # Show buttons with Whale Tracker hidden
             buttons = self.create_main_buttons(hide_button='whale_tracker', show_back=True)
             await query.edit_message_text(response, reply_markup=buttons, parse_mode='Markdown')
+            
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(query.message.chat_id, query.message.message_id, deletion_time)
             
         except Exception as e:
             logger.error(f"Error in whale analysis: {e}")
