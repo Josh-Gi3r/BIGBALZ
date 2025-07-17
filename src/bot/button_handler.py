@@ -537,10 +537,10 @@ class ButtonHandler:
             
             token_data = await self.api_client.get_token_info(network, contract)
             if token_data:
-                # Create session for this alert token
+                # Create session for this alert token (use same user_id as broadcast for consistency)
                 session = self.session_manager.create_session(
                     chat_id=query.message.chat_id,
-                    user_id=query.from_user.id,
+                    user_id=0,  # Use 0 to match broadcast session
                     token_name=f"{token_data.name} ({token_data.symbol})",
                     contract=contract,
                     network=network,
