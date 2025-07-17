@@ -129,13 +129,13 @@ class GeckoTerminalClient:
     
     BASE_URL = "https://api.geckoterminal.com/api/v2"
     
-    def __init__(self, api_key: Optional[str] = None, rate_limit: int = 500):
+    def __init__(self, api_key: Optional[str] = None, rate_limit: int = 30):
         """
         Initialize GeckoTerminal client
         
         Args:
             api_key: Optional API key for GeckoTerminal Pro
-            rate_limit: Calls per minute limit
+            rate_limit: Calls per minute limit (reduced from 500 to 30 based on testing)
         """
         self.api_key = api_key
         self.rate_limiter = RateLimiter(rate_limit, 60)
