@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 
-from ..algorithms.balz_classification import (
+from src.algorithms.balz_classification import (
     BALZCategory, TierLevel, VOLUME_TIERS, LIQUIDITY_TIERS, 
     MARKET_CAP_TIERS, FDV_TIERS, FDV_RATIO_TIERS, SUB_CATEGORIES
 )
