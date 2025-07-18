@@ -216,7 +216,13 @@ async def main():
         # Start session cleanup task
         await components['session_manager'].start_cleanup_task()
         
-        # Start message auto-deletion task
+        # Setup bot handlers FIRST
+        components['bot_handler'].setup()
+        
+        # Initialize the bot application
+        await components['bot_handler'].application.initialize()
+        await components['bot_handler'].application.start()
+        
         await components['bot_handler'].start_cleanup_task()
         
         # Start background monitoring (if enabled)
@@ -227,17 +233,12 @@ async def main():
             )
             logger.info("✅ Background monitoring tasks created successfully")
         
-        # Setup bot handlers
-        components['bot_handler'].setup()
-        
         # Start the bot
         logger.info("Starting Telegram bot...")
         logger.info("Bot is ready to receive messages!")
         logger.info("Press Ctrl+C to stop")
         
         # Run bot
-        await components['bot_handler'].application.initialize()
-        await components['bot_handler'].application.start()
         await components['bot_handler'].application.updater.start_polling(
             drop_pending_updates=True
         )
