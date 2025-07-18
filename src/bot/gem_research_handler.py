@@ -812,36 +812,44 @@ DYOR: This ain't financial advice"""
             
             if age == 'last_48':
                 logger.info(f"🔍 Gathering fresh pools from {session.criteria.network.upper()}...")
-                session.new_pools_list = await self.api_client.get_new_pools_paginated(
-                    session.criteria.network, max_pools=1000
-                )
-                logger.info(f"✅ Analyzed {len(session.new_pools_list)} pools for gems")
-                
+                try:
+                    session.new_pools_list = await self.api_client.get_new_pools_paginated(
+                        session.criteria.network, max_pools=1000
+                    )
+                    logger.info(f"✅ Analyzed {len(session.new_pools_list)} fresh pools for gems")
+                except Exception as api_error:
+                    logger.error(f"❌ Failed to fetch new pools: {api_error}")
+                    session.new_pools_list = []
+                    
             elif age == 'older_2_days':
                 logger.info(f"🔍 Gathering established pools from {session.criteria.network.upper()}...")
                 
-                new_pools = await self.api_client.get_new_pools_paginated(
-                    session.criteria.network, max_pools=1000
-                )
-                new_pool_addresses = set()
-                for pool in new_pools:
-                    contract = self._extract_contract_from_pool(pool)
-                    if contract:
-                        new_pool_addresses.add(contract)
-                
-                all_pools = await self.api_client.get_pools_paginated(
-                    session.criteria.network, sort="h24_volume_usd_desc", max_pools=1000
-                )
-                
-                older_pools = []
-                for pool in all_pools:
-                    contract = self._extract_contract_from_pool(pool)
-                    if contract and contract not in new_pool_addresses:
-                        older_pools.append(pool)
-                
-                session.new_pools_list = older_pools
-                logger.info(f"✅ Analyzed {len(older_pools)} established pools (excluded {len(new_pool_addresses)} fresh pools)")
-            
+                try:
+                    new_pools = await self.api_client.get_new_pools_paginated(
+                        session.criteria.network, max_pools=1000
+                    )
+                    new_pool_addresses = set()
+                    for pool in new_pools:
+                        contract = self._extract_contract_from_pool(pool)
+                        if contract:
+                            new_pool_addresses.add(contract)
+                    
+                    all_pools = await self.api_client.get_pools_paginated(
+                        session.criteria.network, sort="h24_volume_usd_desc", max_pools=1000
+                    )
+                    
+                    older_pools = []
+                    for pool in all_pools:
+                        contract = self._extract_contract_from_pool(pool)
+                        if contract and contract not in new_pool_addresses:
+                            older_pools.append(pool)
+                    
+                    session.new_pools_list = older_pools
+                    logger.info(f"✅ Analyzed {len(older_pools)} established pools (excluded {len(new_pool_addresses)} fresh pools)")
+                except Exception as api_error:
+                    logger.error(f"❌ Failed to fetch established pools: {api_error}")
+                    session.new_pools_list = []
+                    
         except Exception as e:
             logger.error(f"Error handling age selection: {e}")
             session.new_pools_list = []

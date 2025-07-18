@@ -1150,23 +1150,85 @@ class ButtonHandler:
         
         age = age_map.get(callback_data)
         if not age:
+            await query.edit_message_text("❌ Invalid age selection. Please try again.")
+            deletion_time = 25 * 60
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
             return
         
         gem_handler = self.bot_handler.gem_research_handler
         session = gem_handler.create_or_get_session(chat_id, user_id)
         
+        age_text = "last 48 hours" if age == 'last_48' else "older than 2 days"
+        progress_message = f"""🔍 **Searching for gems {age_text}...**
+
+⏳ Analyzing pools on {session.criteria.network.upper()}...
+📊 This may take 15-30 seconds due to API rate limits
+
+*Please wait while I gather the data...*"""
+        
+        await query.edit_message_text(
+            progress_message,
+            parse_mode='Markdown'
+        )
+        
+        # Show typing indicator
         await query.bot.send_chat_action(chat_id=chat_id, action="typing")
         
-        await gem_handler.handle_age_selection(session, age)
-        gem_handler.update_session_step(chat_id, user_id, 'liquidity', age=age)
+        try:
+            # Handle age selection with error handling
+            await gem_handler.handle_age_selection(session, age)
+            gem_handler.update_session_step(chat_id, user_id, 'liquidity', age=age)
+            
+            # Check if we got results
+            if not session.new_pools_list:
+                error_message = f"""❌ **No pools found for {age_text}**
+
+The {session.criteria.network.upper()} network might be experiencing issues or there may be no pools matching your criteria.
+
+[🔄 Try Again] [🌐 Change Network]"""
+                
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔄 Try Again", callback_data=callback_data),
+                        InlineKeyboardButton("🌐 Change Network", callback_data="choice_gems")
+                    ]
+                ]
+                
+                await query.edit_message_text(
+                    error_message,
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                network = session.criteria.network if session.criteria else None
+                message, buttons = gem_handler.get_liquidity_selection_message(network)
+                await query.edit_message_text(
+                    message,
+                    parse_mode='Markdown',
+                    reply_markup=buttons
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in gem age selection: {e}")
+            error_message = f"""❌ **Error processing your selection**
+
+Something went wrong while analyzing {age_text} pools on {session.criteria.network.upper()}.
+
+[🔄 Try Again] [🌐 Change Network]"""
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 Try Again", callback_data=callback_data),
+                    InlineKeyboardButton("🌐 Change Network", callback_data="choice_gems")
+                ]
+            ]
+            
+            await query.edit_message_text(
+                error_message,
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         
-        network = session.criteria.network if session.criteria else None
-        message, buttons = gem_handler.get_liquidity_selection_message(network)
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
         # Schedule deletion
         deletion_time = 25 * 60  # 25 minutes
         await self._schedule_message_deletion(chat_id, message_id, deletion_time)
