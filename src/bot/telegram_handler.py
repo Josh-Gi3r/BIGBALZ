@@ -147,11 +147,11 @@ class TelegramBotHandler:
         async with self.deletion_lock:
             key = f"{chat_id}_{message_id}"
             self.scheduled_deletions[key] = (chat_id, deletion_time)
-            logger.debug(f"Scheduled deletion for message {message_id} in chat {chat_id} at {deletion_time}")
+            logger.info(f"📅 Scheduled deletion for message {message_id} in chat {chat_id} at {deletion_time} (in {(deletion_time - time.time())/60:.1f} minutes)")
     
     async def _cleanup_expired_messages(self):
         """Background task to delete expired messages"""
-        logger.info("Message cleanup task started")
+        logger.info("🧹 Message cleanup task started")
         
         while True:
             try:
@@ -160,41 +160,54 @@ class TelegramBotHandler:
                 
                 async with self.deletion_lock:
                     # Find expired messages
+                    total_scheduled = len(self.scheduled_deletions)
+                    logger.debug(f"🔍 Checking {total_scheduled} scheduled deletions at {current_time}")
+                    
                     for key, (chat_id, deletion_time) in self.scheduled_deletions.items():
                         if current_time >= deletion_time:
                             messages_to_delete.append((key, chat_id))
+                            logger.debug(f"⏰ Message {key} expired (scheduled: {deletion_time}, current: {current_time})")
                 
                 # Delete expired messages
                 for key, chat_id in messages_to_delete:
                     try:
                         message_id = int(key.split('_')[1])
+                        
+                        if not self.application or not self.application.bot:
+                            logger.error(f"❌ Bot application not initialized - cannot delete message {message_id}")
+                            continue
+                            
                         await self.application.bot.delete_message(chat_id=chat_id, message_id=message_id)
                         
                         async with self.deletion_lock:
                             del self.scheduled_deletions[key]
                             
-                        logger.debug(f"Deleted expired message {message_id} from chat {chat_id}")
+                        logger.info(f"🗑️ Successfully deleted expired message {message_id} from chat {chat_id}")
                     except Exception as e:
-                        logger.error(f"Failed to delete message {key}: {e}")
+                        logger.error(f"❌ Failed to delete message {key}: {e}")
                         # Remove from tracking even if deletion failed
                         async with self.deletion_lock:
                             self.scheduled_deletions.pop(key, None)
                 
                 if messages_to_delete:
-                    logger.info(f"Cleaned up {len(messages_to_delete)} expired messages")
+                    logger.info(f"🧹 Cleaned up {len(messages_to_delete)} expired messages")
+                elif len(self.scheduled_deletions) > 0:
+                    logger.debug(f"⏳ {len(self.scheduled_deletions)} messages still scheduled for future deletion")
                 
                 # Check every 30 seconds
                 await asyncio.sleep(30)
                 
             except Exception as e:
-                logger.error(f"Error in cleanup task: {e}")
+                logger.error(f"💥 Error in cleanup task: {e}", exc_info=True)
                 await asyncio.sleep(60)  # Wait longer on error
     
     async def start_cleanup_task(self):
         """Start the message cleanup background task"""
         if not self.cleanup_task:
+            if not self.application:
+                logger.warning("⚠️ Bot application not initialized yet - cleanup task may fail")
             self.cleanup_task = asyncio.create_task(self._cleanup_expired_messages())
-            logger.info("Message cleanup task created")
+            logger.info("🧹 Message cleanup task created and started")
     
     async def stop_cleanup_task(self):
         """Stop the cleanup task"""
