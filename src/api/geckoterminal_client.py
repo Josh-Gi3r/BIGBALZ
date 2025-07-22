@@ -125,16 +125,26 @@ class GeckoTerminalClient:
     
     BASE_URL = "https://api.geckoterminal.com/api/v2"
     
-    def __init__(self, api_key: Optional[str] = None, rate_limit: int = 30):
+    def __init__(self, api_key: Optional[str] = None, rate_limit: Optional[int] = None):
         """
         Initialize GeckoTerminal client
         
         Args:
             api_key: Optional API key for GeckoTerminal Pro
-            rate_limit: Calls per minute limit (reduced from 500 to 30 based on testing)
+            rate_limit: Calls per minute limit (defaults to settings value)
+                       
+        Pro Plan Features:
+        - 500,000 API calls per month
+        - 500 calls per minute rate limit  
+        - 60+ market data endpoints
+        - Exclusive data endpoints
+        - 10 years historical data
+        - Priority email support
         """
-        self.api_key = api_key
-        self.rate_limiter = RateLimiter(rate_limit, 60)
+        from src.config.settings import settings
+        
+        self.api_key = api_key or settings.api.geckoterminal_api_key
+        self.rate_limiter = RateLimiter(rate_limit or settings.api.rate_limit, 60)
         self._cache = {}
         self._cache_ttl = 300  # 5 minutes
         

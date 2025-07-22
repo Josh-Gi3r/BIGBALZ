@@ -24,7 +24,16 @@ class TelegramConfig:
 
 @dataclass
 class APIConfig:
-    """External API configuration"""
+    """External API configuration
+    
+    GeckoTerminal Pro Plan Features:
+    - 500,000 API calls per month
+    - 500 calls per minute rate limit
+    - 60+ market data endpoints  
+    - Exclusive data endpoints
+    - 10 years historical data
+    - Priority email support
+    """
     openai_api_key: str
     geckoterminal_api_key: Optional[str] = None
     geckoterminal_base_url: str = "https://api.geckoterminal.com/api/v2"
