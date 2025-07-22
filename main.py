@@ -153,7 +153,8 @@ async def initialize_components():
             button_handler=None,  # Will be set later
             session_manager=session_manager,
             conversation_handler=conversation_handler,
-            background_monitor=None  # Will be set later
+            background_monitor=None,  # Will be set later
+            settings=settings
         )
         
         # Initialize button handler with bot_handler reference
@@ -164,7 +165,8 @@ async def initialize_components():
             reasoning_engine=reasoning_engine,
             response_generator=response_generator,
             whale_tracker=whale_tracker,
-            bot_handler=bot_handler
+            bot_handler=bot_handler,
+            settings=settings
         )
         
         # Set cross-references
