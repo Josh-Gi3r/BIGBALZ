@@ -254,6 +254,9 @@ class GemResearchHandler:
             [
                 InlineKeyboardButton("🔄 Adjust Search", callback_data="choice_gems"),
                 InlineKeyboardButton("🚀 Show Moonshots", callback_data="choice_moonshots")
+            ],
+            [
+                InlineKeyboardButton("🔍 Help Me Find One", callback_data="gem_auto_search")
             ]
         ]
         return InlineKeyboardMarkup(keyboard)
