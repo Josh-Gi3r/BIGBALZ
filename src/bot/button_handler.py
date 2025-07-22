@@ -3,6 +3,7 @@ Button Handler with Terminal State Design
 Manages all button interactions and enforces terminal states
 """
 
+import asyncio
 import logging
 from typing import Optional, Dict, Any
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -333,6 +334,9 @@ class ButtonHandler:
             return
         elif callback_data.startswith('back_to_gem_'):
             await self._handle_back_to_gem(query, context, callback_data)
+            return
+        elif callback_data == 'gem_auto_search':
+            await self._handle_gem_auto_search(query, context, callback_data)
             return
         
         # Handle moonshot/rug navigation
@@ -1992,3 +1996,118 @@ Something went wrong while analyzing {age_text} pools on {session.criteria.netwo
         except Exception as e:
             logger.error(f"Error handling back to alert button: {e}")
             await query.edit_message_text("❌ Error returning to alert. Please try again.")
+    
+    async def _handle_gem_auto_search(self, query, context, callback_data: str):
+        """Handle auto-search through all combinations for current network"""
+        chat_id = query.message.chat_id
+        user_id = query.from_user.id
+        message_id = query.message.message_id
+        
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            session = gem_handler.create_or_get_session(chat_id, user_id)
+            
+            if not session.network:
+                await query.edit_message_text("❌ No network selected. Please start a new search.")
+                return
+            
+            ages = ['last_48', 'older_2_days']
+            liquidity_levels = ['50_250', '250_1000', '10_50', '1000_plus']  # Start with mid-range
+            mcap_levels = ['micro', 'small', 'mid']
+            
+            total_combinations = len(ages) * len(liquidity_levels) * len(mcap_levels)
+            current_combination = 0
+            
+            network_name = session.network.upper()
+            
+            await query.edit_message_text(
+                f"🔍 **Auto-searching {network_name}...**\n\n"
+                f"Trying all {total_combinations} combinations to find gems.\n"
+                f"This may take 30-60 seconds...\n\n"
+                f"⏳ Starting search...",
+                parse_mode='Markdown'
+            )
+            
+            for age in ages:
+                for liquidity in liquidity_levels:
+                    for mcap in mcap_levels:
+                        current_combination += 1
+                        
+                        liquidity_labels = {'10_50': '$10K-$50K', '50_250': '$50K-$250K', '250_1000': '$250K-$1M', '1000_plus': '$1M+'}
+                        mcap_labels = {'micro': 'Under $1M', 'small': '$1M-$10M', 'mid': '$10M-$50M'}
+                        age_label = 'Last 48 hours' if age == 'last_48' else '3-7 days old'
+                        
+                        await query.edit_message_text(
+                            f"🔍 **Auto-searching {network_name}...**\n\n"
+                            f"Trying combination {current_combination} of {total_combinations}\n"
+                            f"📅 Age: {age_label}\n"
+                            f"💧 Liquidity: {liquidity_labels[liquidity]}\n"
+                            f"💰 Market Cap: {mcap_labels[mcap]}\n\n"
+                            f"⏳ Searching...",
+                            parse_mode='Markdown'
+                        )
+                        
+                        await gem_handler.handle_age_selection(session, age)
+                        
+                        if session.criteria is None:
+                            from src.bot.gem_research_handler import GemCriteria
+                            session.criteria = GemCriteria(network=session.network, age=age, liquidity='', mcap='')
+                        session.criteria.liquidity = liquidity
+                        session.criteria.mcap = mcap
+                        session.step = 'results'
+                        
+                        # Execute research for this combination
+                        gems = await gem_handler.execute_gem_research(session)
+                        
+                        if gems and len(gems) > 0:
+                            session.results = gems
+                            session.current_index = 0
+                            
+                            message, buttons = gem_handler.format_single_gem_result_from_pool(
+                                gems[0], session.criteria, 0, len(gems)
+                            )
+                            
+                            liquidity_labels = {'10_50': '$10K-$50K', '50_250': '$50K-$250K', '250_1000': '$250K-$1M', '1000_plus': '$1M+'}
+                            mcap_labels = {'micro': 'Under $1M', 'small': '$1M-$10M', 'mid': '$10M-$50M'}
+                            age_label = 'Last 48 hours' if age == 'last_48' else '3-7 days old'
+                            
+                            success_message = f"🎉 **Found {len(gems)} gems!**\n\nCombination {current_combination}/{total_combinations} succeeded:\n📅 {age_label} • 💧 {liquidity_labels[liquidity]} • 💰 {mcap_labels[mcap]}\n\n" + message
+                            
+                            await query.edit_message_text(
+                                success_message,
+                                parse_mode='Markdown',
+                                reply_markup=buttons
+                            )
+                            
+                            # Schedule deletion
+                            deletion_time = 25 * 60  # 25 minutes
+                            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+                            return
+                        
+                        # Small delay to avoid rate limits
+                        import asyncio
+                        await asyncio.sleep(1)
+            
+            fallback_message, fallback_buttons = gem_handler.get_no_gems_message(session.network)
+            await query.edit_message_text(
+                f"😔 **Auto-search complete**\n\n"
+                f"Tried all {total_combinations} combinations on {network_name}.\n"
+                f"No gems found matching any criteria right now.\n\n"
+                f"Market might be quiet or your network choice needs adjustment.\n\n"
+                f"{fallback_message}",
+                parse_mode='Markdown',
+                reply_markup=fallback_buttons
+            )
+            
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem auto-search: {e}")
+            await query.edit_message_text(
+                "❌ **Auto-search failed**\n\nAPI timeout or rate limit exceeded. Please try manual search.",
+                parse_mode='Markdown'
+            )
