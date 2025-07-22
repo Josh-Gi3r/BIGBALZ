@@ -225,9 +225,8 @@ class TelegramBotHandler:
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             user_id = update.effective_user.id
-            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in ALLOWED_DM_USERS:
+            if user_id not in self.settings.allowed_dm_users:
                 await update.message.reply_text(
                     "commands in my DMs? really?\n\ngo to @MUSKYBALZAC if you need help. i don't do private tutorials"
                 )
@@ -255,9 +254,8 @@ Looking forward to chatting with you!"""
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             user_id = update.effective_user.id
-            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in ALLOWED_DM_USERS:
+            if user_id not in self.settings.allowed_dm_users:
                 await update.message.reply_text(
                     "need help? in private? sus...\n\njoin @MUSKYBALZAC and ask there. i'm sure someone will help (maybe)"
                 )
@@ -302,9 +300,8 @@ Contact: @YourSupportHandle"""
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             user_id = update.effective_user.id
-            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in ALLOWED_DM_USERS:
+            if user_id not in self.settings.allowed_dm_users:
                 await update.message.reply_text(
                     "wanna know about me? in private? creepy...\n\n@MUSKYBALZAC is where i share my life story"
                 )
@@ -350,9 +347,8 @@ I'm here to make our community a great place to hang out, learn, and share ideas
         # Check if this is a private chat
         if update.effective_chat.type == 'private':
             # Only allow specific user ID (Josh)
-            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in ALLOWED_DM_USERS:
+            if user_id not in self.settings.allowed_dm_users:
                 # Send cheeky response about sliding into DMs
                 dm_responses = [
                     "whoa whoa whoa... sliding into my DMs? i don't do private shows\n\nhead to @MUSKYBALZAC and let's talk there. i'm not that kind of bot",

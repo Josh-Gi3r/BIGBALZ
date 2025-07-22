@@ -237,9 +237,8 @@ class ButtonHandler:
         
         # Check if this is a private chat
         if query.message.chat.type == 'private':
-            ALLOWED_DM_USERS = [831955563]
             
-            if user_id not in ALLOWED_DM_USERS:
+            if user_id not in self.settings.allowed_dm_users:
                 await query.message.reply_text(
                     "clicking buttons in my DMs? that's weird bro\n\njoin @MUSKYBALZAC if you wanna play with buttons"
                 )

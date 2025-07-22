@@ -144,13 +144,20 @@ class SessionManager:
         Returns:
             True if updated, False if session not found
         """
-        session = self.get_session(chat_id, user_id)
-        if session:
-            with self._lock:
+        session_key = self._get_session_key(chat_id, user_id)
+        
+        with self._lock:
+            session = self.sessions.get(session_key)
+            if session and not session.is_expired(self.ttl_seconds):
                 session.token_data = token_data
                 session.update_interaction()
                 logger.debug(f"Updated token data for user {user_id}")
                 return True
+            elif session and session.is_expired(self.ttl_seconds):
+                # Clean up expired session
+                del self.sessions[session_key]
+                logger.info(f"Session expired for user {user_id}")
+        
         return False
     
     def delete_session(self, chat_id: int, user_id: int) -> bool:
