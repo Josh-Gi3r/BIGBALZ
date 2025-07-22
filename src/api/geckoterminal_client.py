@@ -480,7 +480,10 @@ class GeckoTerminalClient:
             base_token_id = base_token_rel.get('data', {}).get('id')
             
             enriched_pool = pool.copy()
-            enriched_attrs = enriched_pool.get('attributes', {}).copy()
+            original_attrs = enriched_pool.get('attributes', {})
+            enriched_attrs = original_attrs.copy()
+            
+            # Add network identifier to enriched attributes
             enriched_attrs['network'] = network
             
             if base_token_id:
@@ -595,7 +598,10 @@ class GeckoTerminalClient:
                 base_token_id = base_token_rel.get('data', {}).get('id')
                 
                 enriched_pool = pool.copy()
-                enriched_attrs = enriched_pool.get('attributes', {}).copy()
+                original_attrs = enriched_pool.get('attributes', {})
+                enriched_attrs = original_attrs.copy()
+                
+                # Add network identifier to enriched attributes
                 enriched_attrs['network'] = network
                 
                 if base_token_id:
@@ -739,7 +745,10 @@ class GeckoTerminalClient:
                 base_token_id = base_token_rel.get('data', {}).get('id')
                 
                 enriched_pool = pool.copy()
-                enriched_attrs = enriched_pool.get('attributes', {}).copy()
+                original_attrs = enriched_pool.get('attributes', {})
+                enriched_attrs = original_attrs.copy()
+                
+                # Add network identifier to enriched attributes
                 enriched_attrs['network'] = network
                 
                 if base_token_id:

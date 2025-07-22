@@ -802,24 +802,24 @@ DYOR: This ain't financial advice"""
     
     async def handle_age_selection(self, session: GemResearchSession, age: str):
         """Handle age selection using simplified trending pools approach (95% faster)"""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         
         try:
             # Update session criteria
             if session.criteria is None:
-                session.criteria = GemCriteria(network='', age='', liquidity='', mcap='')
+                session.criteria = GemCriteria(network=session.network, age='', liquidity='', mcap='')
             session.criteria.age = age
             session.step = 'liquidity'
             session.timestamp = time.time()
             
-            network = session.criteria.network
+            network = session.network
             logger.info(f"🔍 Searching for gems on {network.upper()} using trending pools...")
             
             if age == 'last_48':
                 trending_pools = await self.api_client.get_trending_pools(network, "5m", 50)
                 
-                # Filter by actual timestamp for last 48 hours
-                cutoff = datetime.now() - timedelta(hours=48)
+                # Filter by actual timestamp for last 48 hours (use UTC timezone)
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
                 filtered_pools = []
                 
                 for pool in trending_pools:
@@ -827,7 +827,7 @@ DYOR: This ain't financial advice"""
                     if pool_created_at:
                         try:
                             created_time = datetime.fromisoformat(pool_created_at.replace('Z', '+00:00'))
-                            if created_time.replace(tzinfo=None) >= cutoff:
+                            if created_time >= cutoff:
                                 filtered_pools.append(pool)
                         except:
                             filtered_pools.append(pool)
@@ -840,8 +840,8 @@ DYOR: This ain't financial advice"""
             elif age == 'older_2_days':
                 trending_pools = await self.api_client.get_trending_pools(network, "24h", 50)
                 
-                # Filter by actual timestamp for older than 2 days
-                cutoff = datetime.now() - timedelta(days=2)
+                # Filter by actual timestamp for older than 2 days (use UTC timezone)
+                cutoff = datetime.now(timezone.utc) - timedelta(days=2)
                 filtered_pools = []
                 
                 for pool in trending_pools:
@@ -849,7 +849,7 @@ DYOR: This ain't financial advice"""
                     if pool_created_at:
                         try:
                             created_time = datetime.fromisoformat(pool_created_at.replace('Z', '+00:00'))
-                            if created_time.replace(tzinfo=None) < cutoff:
+                            if created_time < cutoff:
                                 filtered_pools.append(pool)
                         except:
                             filtered_pools.append(pool)
