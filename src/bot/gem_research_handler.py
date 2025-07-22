@@ -31,6 +31,7 @@ class GemResearchSession:
     chat_id: int
     user_id: int
     step: str  # 'network', 'age', 'liquidity', 'mcap', 'results'
+    network: str = ''  # Network identifier (e.g., 'solana', 'base', 'bsc', 'eth')
     criteria: Optional[GemCriteria] = None
     results: List[Dict] = None
     current_index: int = 0
@@ -416,10 +417,12 @@ Market conditions:
                 network='', age='', liquidity='', mcap=''
             )
         
-        # Update criteria fields
+        # Update criteria fields and session fields
         for key, value in kwargs.items():
             if hasattr(session.criteria, key):
                 setattr(session.criteria, key, value)
+            if hasattr(session, key):
+                setattr(session, key, value)
     
     def classify_gem(self, token_data: TokenData, criteria: GemCriteria) -> GemClassification:
         """Classify gem based on criteria and metrics"""
