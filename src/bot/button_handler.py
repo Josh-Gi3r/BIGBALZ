@@ -24,7 +24,7 @@ class ButtonHandler:
     """
     
     def __init__(self, api_client, session_manager, reasoning_engine=None, 
-                 response_generator=None, whale_tracker=None, bot_handler=None):
+                 response_generator=None, whale_tracker=None, bot_handler=None, settings=None):
         """
         Initialize button handler
         
@@ -35,9 +35,11 @@ class ButtonHandler:
             response_generator: Response generator for BALZ
             whale_tracker: Whale analysis system
             bot_handler: Reference to telegram bot handler
+            settings: Application settings object
         """
         self.api_client = api_client
         self.session_manager = session_manager
+        self.settings = settings
         self.reasoning_engine = reasoning_engine or ReasoningEngine()
         self.response_generator = response_generator
         self.whale_tracker = whale_tracker

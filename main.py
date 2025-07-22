@@ -148,6 +148,7 @@ async def initialize_components():
         logger.info("Initializing Telegram bot handler...")
         bot_handler = TelegramBotHandler(
             token=settings.telegram.bot_token,
+            settings=settings,
             api_client=api_client,
             balz_engine=reasoning_engine,
             button_handler=None,  # Will be set later
@@ -164,7 +165,8 @@ async def initialize_components():
             reasoning_engine=reasoning_engine,
             response_generator=response_generator,
             whale_tracker=whale_tracker,
-            bot_handler=bot_handler
+            bot_handler=bot_handler,
+            settings=settings
         )
         
         # Set cross-references

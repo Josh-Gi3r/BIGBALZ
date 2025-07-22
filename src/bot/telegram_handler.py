@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class TelegramBotHandler:
     """Main Telegram bot handler for BIGBALZ"""
     
-    def __init__(self, token: str, api_client=None, balz_engine=None, 
+    def __init__(self, token: str, settings=None, api_client=None, balz_engine=None, 
                  button_handler=None, session_manager=None, conversation_handler=None,
                  background_monitor=None):
         """
@@ -31,6 +31,7 @@ class TelegramBotHandler:
         
         Args:
             token: Telegram bot token
+            settings: Application settings object
             api_client: GeckoTerminal API client
             balz_engine: BALZ classification engine
             button_handler: Button interaction handler
@@ -39,6 +40,7 @@ class TelegramBotHandler:
             background_monitor: Background monitoring system
         """
         self.token = token
+        self.settings = settings
         self.api_client = api_client
         self.balz_engine = balz_engine
         self.button_handler = button_handler
