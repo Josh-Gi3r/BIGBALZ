@@ -52,6 +52,7 @@ BIGBALZ Bot combines institutional-level market analysis with real-time monitori
 - **Interactive Discovery**: 4-step personalized search flow
 - **8 Gem Categories**: From DEGEN PLAY to SAFE BET classifications
 - **Multi-Parameter Filtering**: Network, age, liquidity, market cap
+- **Token Symbol Enrichment**: Real token symbols instead of generic placeholders
 - **FDV Analysis**: Automatic dilution risk assessment
 
 ### 🤖 **AI-Powered Conversations**
@@ -78,6 +79,7 @@ BIGBALZ Bot combines institutional-level market analysis with real-time monitori
 ### 📋 **Prerequisites**
 - Python 3.12+
 - Telegram Bot Token
+- GeckoTerminal Pro API Key (500 calls/minute)
 - OpenAI API Key
 - PostgreSQL Database
 
@@ -124,6 +126,10 @@ Create a `.env` file with the following variables:
 ```env
 # Telegram Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+
+# GeckoTerminal Pro Plan Configuration
+GECKOTERMINAL_API_KEY=your_geckoterminal_pro_api_key_here
+API_RATE_LIMIT=500
 
 # OpenAI Configuration  
 OPENAI_API_KEY=your_openai_api_key_here
@@ -291,7 +297,8 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 ## 📊 **Performance & Reliability**
 
 ### ⚡ **Performance Metrics**
-- **Response Time**: <2 seconds average
+- **Response Time**: <3 seconds average (Pro plan optimized)
+- **API Rate Limit**: 500 calls/minute (GeckoTerminal Pro plan)
 - **Uptime**: 99.9% availability target
 - **Throughput**: 1000+ requests/minute
 - **Accuracy**: 95%+ detection precision
