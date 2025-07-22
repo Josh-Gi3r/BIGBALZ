@@ -302,37 +302,37 @@ class ButtonHandler:
             await self._handle_gem_choice(query, callback_data)
             return
         elif callback_data.startswith('gem_network_'):
-            await self._handle_gem_network_selection(query, callback_data)
+            await self._handle_gem_network_selection(query, context, callback_data)
             return
         elif callback_data.startswith('gem_age_'):
-            await self._handle_gem_age_selection(query, callback_data)
+            await self._handle_gem_age_selection(query, context, callback_data)
             return
         elif callback_data.startswith('gem_liq_'):
-            await self._handle_gem_liquidity_selection(query, callback_data)
+            await self._handle_gem_liquidity_selection(query, context, callback_data)
             return
         elif callback_data.startswith('gem_mcap_'):
-            await self._handle_gem_mcap_selection(query, callback_data)
+            await self._handle_gem_mcap_selection(query, context, callback_data)
             return
         elif callback_data.startswith('gem_analyze_'):
-            await self._handle_gem_analyze(query, callback_data)
+            await self._handle_gem_analyze(query, context, callback_data)
             return
         elif callback_data.startswith('gem_socials_'):
-            await self._handle_gem_socials(query, callback_data)
+            await self._handle_gem_socials(query, context, callback_data)
             return
         elif callback_data.startswith('gem_whale_'):
-            await self._handle_gem_whale(query, callback_data)
+            await self._handle_gem_whale(query, context, callback_data)
             return
         elif callback_data.startswith('gem_balz_'):
-            await self._handle_gem_balz(query, callback_data)
+            await self._handle_gem_balz(query, context, callback_data)
             return
         elif callback_data.startswith('gem_next_'):
-            await self._handle_gem_navigation(query, callback_data, 'next')
+            await self._handle_gem_navigation(query, context, callback_data, 'next')
             return
         elif callback_data.startswith('gem_back_'):
-            await self._handle_gem_navigation(query, callback_data, 'back')
+            await self._handle_gem_navigation(query, context, callback_data, 'back')
             return
         elif callback_data.startswith('back_to_gem_'):
-            await self._handle_back_to_gem(query, callback_data)
+            await self._handle_back_to_gem(query, context, callback_data)
             return
         
         # Handle moonshot/rug navigation
@@ -1108,37 +1108,47 @@ class ButtonHandler:
                 deletion_time = 25 * 60  # 25 minutes
                 await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_network_selection(self, query, callback_data: str):
+    async def _handle_gem_network_selection(self, query, context, callback_data: str):
         """Handle network selection in gem research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        network_map = {
-            'gem_network_solana': 'solana',
-            'gem_network_eth': 'eth',
-            'gem_network_bsc': 'bsc', 
-            'gem_network_base': 'base'
-        }
-        
-        network = network_map.get(callback_data)
-        if not network:
-            return
-        
-        gem_handler = self.bot_handler.gem_research_handler
-        gem_handler.update_session_step(chat_id, user_id, 'age', network=network)
-        
-        message, buttons = gem_handler.get_age_selection_message()
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            network_map = {
+                'gem_network_solana': 'solana',
+                'gem_network_eth': 'eth',
+                'gem_network_bsc': 'bsc', 
+                'gem_network_base': 'base'
+            }
+            
+            network = network_map.get(callback_data)
+            if not network:
+                return
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            gem_handler.update_session_step(chat_id, user_id, 'age', network=network)
+            
+            message, buttons = gem_handler.get_age_selection_message()
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem network selection: {e}")
+            await query.edit_message_text(
+                "❌ **Error**\n\nSomething went wrong. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_gem_age_selection(self, query, callback_data: str):
+    async def _handle_gem_age_selection(self, query, context, callback_data: str):
         """Handle age selection in gem research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
@@ -1173,7 +1183,7 @@ class ButtonHandler:
         )
         
         # Show typing indicator
-        await query.bot.send_chat_action(chat_id=chat_id, action="typing")
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
         
         try:
             # Handle age selection with error handling
@@ -1234,328 +1244,408 @@ Something went wrong while analyzing {age_text} pools on {session.criteria.netwo
         deletion_time = 25 * 60  # 25 minutes
         await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_liquidity_selection(self, query, callback_data: str):
+    async def _handle_gem_liquidity_selection(self, query, context, callback_data: str):
         """Handle liquidity selection in gem research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        liq_map = {
-            'gem_liq_10_50': '10_50',
-            'gem_liq_50_250': '50_250',
-            'gem_liq_250_1000': '250_1000',
-            'gem_liq_1000_plus': '1000_plus',
-            'gem_liq_sol_2_10': 'sol_2_10',
-            'gem_liq_sol_10_50': 'sol_10_50',
-            'gem_liq_sol_50_150': 'sol_50_150',
-            'gem_liq_sol_150_500': 'sol_150_500'
-        }
-        
-        liquidity = liq_map.get(callback_data)
-        if not liquidity:
-            return
-        
-        gem_handler = self.bot_handler.gem_research_handler
-        gem_handler.update_session_step(chat_id, user_id, 'mcap', liquidity=liquidity)
-        
-        message, buttons = gem_handler.get_mcap_selection_message()
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            liq_map = {
+                'gem_liq_10_50': '10_50',
+                'gem_liq_50_250': '50_250',
+                'gem_liq_250_1000': '250_1000',
+                'gem_liq_1000_plus': '1000_plus',
+                'gem_liq_sol_2_10': 'sol_2_10',
+                'gem_liq_sol_10_50': 'sol_10_50',
+                'gem_liq_sol_50_150': 'sol_50_150',
+                'gem_liq_sol_150_500': 'sol_150_500'
+            }
+            
+            liquidity = liq_map.get(callback_data)
+            if not liquidity:
+                return
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            gem_handler.update_session_step(chat_id, user_id, 'mcap', liquidity=liquidity)
+            
+            message, buttons = gem_handler.get_mcap_selection_message()
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem liquidity selection: {e}")
+            await query.edit_message_text(
+                "❌ **Error**\n\nSomething went wrong. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_gem_mcap_selection(self, query, callback_data: str):
+    async def _handle_gem_mcap_selection(self, query, context, callback_data: str):
         """Handle market cap selection and execute research"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        mcap_map = {
-            'gem_mcap_micro': 'micro',
-            'gem_mcap_small': 'small',
-            'gem_mcap_mid': 'mid'
-        }
-        
-        mcap = mcap_map.get(callback_data)
-        if not mcap:
-            return
-        
-        gem_handler = self.bot_handler.gem_research_handler
-        session = gem_handler.create_or_get_session(chat_id, user_id)
-        
-        if session.criteria is None:
-            session.criteria = GemCriteria(network='', age='', liquidity='', mcap='')
-        
-        session.criteria.mcap = mcap
-        session.step = 'results'
-        
-        # Show loading message
-        loading_message = gem_handler.get_research_loading_message(session.criteria)
-        await query.edit_message_text(loading_message, parse_mode='Markdown')
-        
-        # Execute research
-        gems = await gem_handler.execute_gem_research(session)
-        
-        if not gems:
-            # No gems found
-            message, buttons = gem_handler.get_no_gems_message(session.criteria.network)
-            await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
-            )
-            # Schedule deletion for no gems found state
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
-        else:
-            # Store results and show first gem
-            session.results = gems
-            session.current_index = 0
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
             
-            message, buttons = gem_handler.format_single_gem_result_from_pool(
-                gems[0], session.criteria, 0, len(gems)
-            )
+            mcap_map = {
+                'gem_mcap_micro': 'micro',
+                'gem_mcap_small': 'small',
+                'gem_mcap_mid': 'mid'
+            }
+            
+            mcap = mcap_map.get(callback_data)
+            if not mcap:
+                return
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            session = gem_handler.create_or_get_session(chat_id, user_id)
+            
+            if session.criteria is None:
+                session.criteria = GemCriteria(network='', age='', liquidity='', mcap='')
+            
+            session.criteria.mcap = mcap
+            session.step = 'results'
+            
+            # Show loading message
+            loading_message = gem_handler.get_research_loading_message(session.criteria)
+            await query.edit_message_text(loading_message, parse_mode='Markdown')
+            
+            # Execute research
+            gems = await gem_handler.execute_gem_research(session)
+            
+            if not gems:
+                # No gems found
+                message, buttons = gem_handler.get_no_gems_message(session.criteria.network)
+                await query.edit_message_text(
+                    message,
+                    parse_mode='Markdown',
+                    reply_markup=buttons
+                )
+                # Schedule deletion for no gems found state
+                deletion_time = 25 * 60  # 25 minutes
+                await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            else:
+                # Store results and show first gem
+                session.results = gems
+                session.current_index = 0
+                
+                message, buttons = gem_handler.format_single_gem_result_from_pool(
+                    gems[0], session.criteria, 0, len(gems)
+                )
+                await query.edit_message_text(
+                    message,
+                    parse_mode='Markdown',
+                    reply_markup=buttons
+                )
+                # Schedule deletion for gem result state
+                deletion_time = 25 * 60  # 25 minutes
+                await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+                
+        except Exception as e:
+            logger.error(f"Error in gem mcap selection and research execution: {e}")
             await query.edit_message_text(
-                message,
-                parse_mode='Markdown',
-                reply_markup=buttons
+                "❌ **Error executing gem research**\n\nAPI timeout or rate limit exceeded. Please try again in a few moments.",
+                parse_mode='Markdown'
             )
-            # Schedule deletion for gem result state
-            deletion_time = 25 * 60  # 25 minutes
-            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
     
-    async def _handle_gem_analyze(self, query, callback_data: str):
+    async def _handle_gem_analyze(self, query, context, callback_data: str):
         """Handle gem token details analysis"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
         user_id = query.from_user.id
         
-        parts = callback_data.split('_')
-        if len(parts) < 4:
-            return
-        
-        network = parts[2]
-        contract = '_'.join(parts[3:])
-        
-        session = self.session_manager.get_session(chat_id, user_id)
-        if not session:
-            session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
-        
-        # Store in session for consistent access pattern
-        session.current_contract = contract
-        session.current_network = network
-        
-        # Get token data using session properties
-        token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-        if not token_data:
-            await query.edit_message_text("❌ Unable to fetch token data")
-            return
-        
-        session.current_token = token_data.symbol
-        session.current_token_data = token_data
-        
-        # Format token overview
-        from ..bot.message_formatter import MessageFormatter
-        overview = MessageFormatter.format_token_overview(token_data)
-        
-        # Create back button
-        gem_handler = self.bot_handler.gem_research_handler
-        buttons = gem_handler.create_gem_detail_back_button(0)
-        
-        await query.edit_message_text(
-            overview,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            parts = callback_data.split('_')
+            if len(parts) < 4:
+                return
+            
+            network = parts[2]
+            contract = '_'.join(parts[3:])
+            
+            session = self.session_manager.get_session(chat_id, user_id)
+            if not session:
+                session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
+            
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            
+            # Get token data using session properties
+            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
+            if not token_data:
+                await query.edit_message_text("❌ Unable to fetch token data")
+                return
+            
+            session.current_token = token_data.symbol
+            session.current_token_data = token_data
+            
+            # Format token overview
+            from ..bot.message_formatter import MessageFormatter
+            overview = MessageFormatter.format_token_overview(token_data)
+            
+            # Create back button
+            gem_handler = self.bot_handler.gem_research_handler
+            buttons = gem_handler.create_gem_detail_back_button(0)
+            
+            await query.edit_message_text(
+                overview,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem analyze: {e}")
+            await query.edit_message_text(
+                "❌ **Error analyzing token**\n\nUnable to fetch token data. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_gem_socials(self, query, callback_data: str):
+    async def _handle_gem_socials(self, query, context, callback_data: str):
         """Handle gem socials"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
         user_id = query.from_user.id
         
-        parts = callback_data.split('_')
-        if len(parts) < 4:
-            return
-        
-        network = parts[2]
-        contract = '_'.join(parts[3:])
-        
-        # Get or create session for consistent access pattern
-        session = self.session_manager.get_session(chat_id, user_id)
-        if not session:
-            session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
-        
-        # Store in session for consistent access pattern
-        session.current_contract = contract
-        session.current_network = network
-        
-        # Get social data using session properties
-        social_data = await self.api_client.get_social_info(session.current_network, session.current_contract)
-        
-        if social_data:
-            # Get token info for name using session properties
-            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-            if token_data:
-                session.current_token = token_data.symbol
-                session.current_token_data = token_data
-                token_name = f"{token_data.name} ({token_data.symbol})"
-            else:
-                token_name = "Token"
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
             
-            response = self._format_social_response(social_data, token_name)
-        else:
-            response = f"📱 **Social Links**\n\nℹ️ No social information available for this token."
-        
-        # Create back button
-        gem_handler = self.bot_handler.gem_research_handler
-        buttons = gem_handler.create_gem_detail_back_button(0)
-        
-        await query.edit_message_text(
-            response,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            parts = callback_data.split('_')
+            if len(parts) < 4:
+                return
+            
+            network = parts[2]
+            contract = '_'.join(parts[3:])
+            
+            # Get or create session for consistent access pattern
+            session = self.session_manager.get_session(chat_id, user_id)
+            if not session:
+                session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
+            
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            
+            # Get social data using session properties
+            social_data = await self.api_client.get_social_info(session.current_network, session.current_contract)
+            
+            if social_data:
+                # Get token info for name using session properties
+                token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
+                if token_data:
+                    session.current_token = token_data.symbol
+                    session.current_token_data = token_data
+                    token_name = f"{token_data.name} ({token_data.symbol})"
+                else:
+                    token_name = "Token"
+                
+                response = self._format_social_response(social_data, token_name)
+            else:
+                response = f"📱 **Social Links**\n\nℹ️ No social information available for this token."
+            
+            # Create back button
+            gem_handler = self.bot_handler.gem_research_handler
+            buttons = gem_handler.create_gem_detail_back_button(0)
+            
+            await query.edit_message_text(
+                response,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem socials: {e}")
+            await query.edit_message_text(
+                "❌ **Error fetching social data**\n\nUnable to retrieve social information. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_gem_whale(self, query, callback_data: str):
+    async def _handle_gem_whale(self, query, context, callback_data: str):
         """Handle gem whale tracker"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
         
-        gem_handler = self.bot_handler.gem_research_handler
-        message, buttons = gem_handler.format_whale_tracker_message("Token")
-        
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            message, buttons = gem_handler.format_whale_tracker_message("Token")
+            
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem whale tracker: {e}")
+            await query.edit_message_text(
+                "❌ **Error loading whale tracker**\n\nUnable to load whale tracking data. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_gem_balz(self, query, callback_data: str):
+    async def _handle_gem_balz(self, query, context, callback_data: str):
         """Handle gem BALZ rank"""
         chat_id = query.message.chat_id
         message_id = query.message.message_id
         user_id = query.from_user.id
         
-        parts = callback_data.split('_')
-        if len(parts) < 4:
-            return
-        
-        network = parts[2]
-        contract = '_'.join(parts[3:])
-        
-        # Get or create session for consistent access pattern
-        session = self.session_manager.get_session(chat_id, user_id)
-        if not session:
-            session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
-        
-        # Store in session for consistent access pattern
-        session.current_contract = contract
-        session.current_network = network
-        
-        # Get token data using session properties
-        token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
-        if not token_data:
-            await query.edit_message_text("❌ Unable to fetch token data")
-            return
-        
-        session.current_token = token_data.symbol
-        session.current_token_data = token_data
-        
-        gem_handler = self.bot_handler.gem_research_handler
-        gem_session = gem_handler.create_or_get_session(chat_id, user_id)
-        
-        if gem_session.criteria:
-            message, buttons = gem_handler.format_balz_rank_message(token_data, gem_session.criteria)
-        else:
-            # Fallback if no criteria
-            from src.bot.gem_research_handler import GemCriteria
-            default_criteria = GemCriteria(network=network, age='early', liquidity='50_250', mcap='small')
-            message, buttons = gem_handler.format_balz_rank_message(token_data, default_criteria)
-        
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            parts = callback_data.split('_')
+            if len(parts) < 4:
+                return
+            
+            network = parts[2]
+            contract = '_'.join(parts[3:])
+            
+            # Get or create session for consistent access pattern
+            session = self.session_manager.get_session(chat_id, user_id)
+            if not session:
+                session = self.session_manager.create_session(chat_id, user_id, "Gem", contract, network, {})
+            
+            # Store in session for consistent access pattern
+            session.current_contract = contract
+            session.current_network = network
+            
+            # Get token data using session properties
+            token_data = await self.api_client.get_token_info(session.current_network, session.current_contract)
+            if not token_data:
+                await query.edit_message_text("❌ Unable to fetch token data")
+                return
+            
+            session.current_token = token_data.symbol
+            session.current_token_data = token_data
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            gem_session = gem_handler.create_or_get_session(chat_id, user_id)
+            
+            if gem_session.criteria:
+                message, buttons = gem_handler.format_balz_rank_message(token_data, gem_session.criteria)
+            else:
+                # Fallback if no criteria
+                from src.bot.gem_research_handler import GemCriteria
+                default_criteria = GemCriteria(network=network, age='early', liquidity='50_250', mcap='small')
+                message, buttons = gem_handler.format_balz_rank_message(token_data, default_criteria)
+            
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem BALZ rank: {e}")
+            await query.edit_message_text(
+                "❌ **Error calculating BALZ rank**\n\nUnable to fetch token data for ranking. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_gem_navigation(self, query, callback_data: str, direction: str):
+    async def _handle_gem_navigation(self, query, context, callback_data: str, direction: str):
         """Handle gem result navigation"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        gem_handler = self.bot_handler.gem_research_handler
-        session = gem_handler.create_or_get_session(chat_id, user_id)
-        
-        if not session.results:
-            await query.edit_message_text("Session expired. Please start a new search.")
-            return
-        
-        # Update index
-        if direction == 'next':
-            session.current_index = min(session.current_index + 1, len(session.results) - 1)
-        else:  # back
-            session.current_index = max(session.current_index - 1, 0)
-        
-        # Show new gem
-        current_gem = session.results[session.current_index]
-        message, buttons = gem_handler.format_single_gem_result_from_pool(
-            current_gem, session.criteria, session.current_index, len(session.results)
-        )
-        
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            session = gem_handler.create_or_get_session(chat_id, user_id)
+            
+            if not session.results:
+                await query.edit_message_text("Session expired. Please start a new search.")
+                return
+            
+            # Update index
+            if direction == 'next':
+                session.current_index = min(session.current_index + 1, len(session.results) - 1)
+            else:  # back
+                session.current_index = max(session.current_index - 1, 0)
+            
+            # Show new gem
+            current_gem = session.results[session.current_index]
+            message, buttons = gem_handler.format_single_gem_result_from_pool(
+                current_gem, session.criteria, session.current_index, len(session.results)
+            )
+            
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error in gem navigation: {e}")
+            await query.edit_message_text(
+                "❌ **Error navigating gems**\n\nUnable to load gem data. Please try again.",
+                parse_mode='Markdown'
+            )
     
-    async def _handle_back_to_gem(self, query, callback_data: str):
+    async def _handle_back_to_gem(self, query, context, callback_data: str):
         """Handle back to gem from detail view"""
         chat_id = query.message.chat_id
         user_id = query.from_user.id
         message_id = query.message.message_id
         
-        gem_handler = self.bot_handler.gem_research_handler
-        session = gem_handler.create_or_get_session(chat_id, user_id)
-        
-        if not session.results or session.current_index >= len(session.results):
-            await query.edit_message_text("Session expired. Please start a new search.")
-            return
-        
-        # Show current gem
-        current_gem = session.results[session.current_index]
-        message, buttons = gem_handler.format_single_gem_result_from_pool(
-            current_gem, session.criteria, session.current_index, len(session.results)
-        )
-        
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=buttons
-        )
-        # Schedule deletion
-        deletion_time = 25 * 60  # 25 minutes
-        await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            gem_handler = self.bot_handler.gem_research_handler
+            session = gem_handler.create_or_get_session(chat_id, user_id)
+            
+            if not session.results or session.current_index >= len(session.results):
+                await query.edit_message_text("Session expired. Please start a new search.")
+                return
+            
+            # Show current gem
+            current_gem = session.results[session.current_index]
+            message, buttons = gem_handler.format_single_gem_result_from_pool(
+                current_gem, session.criteria, session.current_index, len(session.results)
+            )
+            
+            await query.edit_message_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=buttons
+            )
+            # Schedule deletion
+            deletion_time = 25 * 60  # 25 minutes
+            await self._schedule_message_deletion(chat_id, message_id, deletion_time)
+            
+        except Exception as e:
+            logger.error(f"Error returning to gem view: {e}")
+            await query.edit_message_text(
+                "❌ **Error loading gem**\n\nUnable to load gem data. Please try again.",
+                parse_mode='Markdown'
+            )
     
     def _format_balz_response(self, classification, token_symbol: str) -> str:
         """Format BALZ classification response"""
