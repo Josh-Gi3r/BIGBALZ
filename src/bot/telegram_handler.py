@@ -25,7 +25,7 @@ class TelegramBotHandler:
     
     def __init__(self, token: str, api_client=None, balz_engine=None, 
                  button_handler=None, session_manager=None, conversation_handler=None,
-                 background_monitor=None):
+                 background_monitor=None, settings=None):
         """
         Initialize the Telegram bot handler
         
@@ -37,6 +37,7 @@ class TelegramBotHandler:
             session_manager: Session state manager
             conversation_handler: AI conversation handler for general chat
             background_monitor: Background monitoring system
+            settings: Application settings configuration
         """
         self.token = token
         self.api_client = api_client
@@ -45,6 +46,7 @@ class TelegramBotHandler:
         self.session_manager = session_manager
         self.conversation_handler = conversation_handler
         self.background_monitor = background_monitor
+        self.settings = settings
         self.application = None
         
         # Track chats for alerts
