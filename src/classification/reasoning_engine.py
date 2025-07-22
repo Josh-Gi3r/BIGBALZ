@@ -178,7 +178,7 @@ class ReasoningEngine:
     def _calculate_fdv_ratio(self, fdv: float, market_cap: float) -> float:
         """Calculate FDV to Market Cap ratio"""
         if market_cap <= 0:
-            return 100.0  # Max ratio for zero market cap
+            return float('inf')  # Infinite ratio for zero market cap
         return fdv / market_cap
     
     def _determine_balz_category(self, volume_tier: str, 

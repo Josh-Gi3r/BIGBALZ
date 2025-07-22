@@ -156,6 +156,19 @@ class ContractValidator:
         return address
     
     @classmethod
+    def get_network_name(cls, network: str) -> str:
+        """
+        Get display name for network
+        
+        Args:
+            network: Network identifier
+            
+        Returns:
+            Human-readable network name
+        """
+        return cls.NETWORK_NAMES.get(network, network.upper())
+    
+    @classmethod
     def get_explorer_url(cls, address: str, network: str) -> Optional[str]:
         """
         Get blockchain explorer URL for the contract

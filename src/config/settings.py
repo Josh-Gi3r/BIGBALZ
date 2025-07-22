@@ -118,6 +118,9 @@ class Settings:
         if not bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN is required")
         
+        allowed_dm_users_str = os.getenv('ALLOWED_DM_USERS', '831955563')
+        self.allowed_dm_users = [int(x.strip()) for x in allowed_dm_users_str.split(',') if x.strip()]
+        
         return TelegramConfig(
             bot_token=bot_token,
             admin_chat_id=os.getenv('ADMIN_CHAT_ID')

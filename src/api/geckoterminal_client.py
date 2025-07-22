@@ -70,7 +70,7 @@ class SocialData:
 
 
 class RateLimiter:
-    """Advanced rate limiter with priority queue support"""
+    """Rate limiter with sliding window"""
     
     def __init__(self, max_calls: int, time_window: int = 60):
         """
@@ -83,8 +83,6 @@ class RateLimiter:
         self.max_calls = max_calls
         self.time_window = time_window
         self.calls = deque()
-        self.priority_queue = asyncio.PriorityQueue()
-        self.semaphore = asyncio.Semaphore(max_calls)
         self._lock = asyncio.Lock()
         
     async def acquire(self, priority: int = 1):
@@ -92,10 +90,8 @@ class RateLimiter:
         Acquire permission to make an API call
         
         Args:
-            priority: Call priority (0 = highest, higher numbers = lower priority)
+            priority: Call priority (unused, kept for compatibility)
         """
-        await self.priority_queue.put((priority, time.time()))
-        
         async with self._lock:
             now = time.time()
             
