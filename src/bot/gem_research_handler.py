@@ -816,13 +816,13 @@ DYOR: This ain't financial advice"""
             logger.info(f"🔍 Searching for gems on {network.upper()} using trending pools...")
             
             if age == 'last_48':
-                trending_pools = await self.api_client.get_trending_pools(network, "5m", 50)
+                new_pools = await self.api_client.get_new_pools_paginated(network, max_pools=50)
                 
                 # Filter by actual timestamp for last 48 hours (use UTC timezone)
                 cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
                 filtered_pools = []
                 
-                for pool in trending_pools:
+                for pool in new_pools:
                     pool_created_at = pool.get('attributes', {}).get('pool_created_at')
                     if pool_created_at:
                         try:
@@ -835,7 +835,7 @@ DYOR: This ain't financial advice"""
                         filtered_pools.append(pool)
                 
                 session.new_pools_list = filtered_pools
-                logger.info(f"✅ Found {len(filtered_pools)} fresh pools from trending data")
+                logger.info(f"✅ Found {len(filtered_pools)} fresh pools from new pools data")
                 
             elif age == 'older_2_days':
                 trending_pools = await self.api_client.get_trending_pools(network, "24h", 50)

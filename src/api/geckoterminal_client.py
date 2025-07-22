@@ -539,7 +539,7 @@ class GeckoTerminalClient:
         Returns:
             List of new pool data
         """
-        url = f"{self.BASE_URL}/networks/new_pools"
+        url = f"{self.BASE_URL}/networks/{network}/new_pools"
         url += f"?limit={limit}"
         
         data = await self._make_request(url, priority=3)
