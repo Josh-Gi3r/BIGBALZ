@@ -491,11 +491,11 @@ Market conditions:
             circulating_percent = (token_data.market_cap_usd / token_data.fdv_usd) * 100
             
             if ratio > 10:
-                return f"⚠️ High dilution risk - only {circulating_percent:.0f}% tokens circulating"
+                return f"⚠️ High dilution risk - only {min(circulating_percent, 100.0):.0f}% tokens circulating"
             elif ratio >= 2:
-                return f"Moderate dilution - {circulating_percent:.0f}% tokens circulating"
+                return f"Moderate dilution - {min(circulating_percent, 100.0):.0f}% tokens circulating"
             else:
-                return f"✅ Low dilution risk - {circulating_percent:.0f}% tokens circulating"
+                return f"✅ Low dilution risk - {min(circulating_percent, 100.0):.0f}% tokens circulating"
         
         return "FDV data not available"
     
@@ -568,7 +568,7 @@ Real talk, this is gambling not investing 🎲
 FDV/MCap: {fdv_analysis}
 Can't verify: Contract safety, holder distribution, team
 High risk: Liquidity can vanish, prices can nuke
-DYOR: This ain't financial advice"""
+BIGBALZ TRUTH: This is straight financial advice, no sugar coating"""
 
         buttons = self.create_gem_action_buttons(
             token_data.network, 
@@ -789,7 +789,11 @@ DYOR: This ain't financial advice"""
             
             tx_data = attrs.get('transactions', {})
             if isinstance(tx_data, dict):
-                tx_count = tx_data.get('h24', 0)
+                tx_h24_data = tx_data.get('h24', 0)
+                if isinstance(tx_h24_data, dict):
+                    tx_count = self._format_transaction_data(tx_h24_data)
+                else:
+                    tx_count = tx_h24_data
             else:
                 tx_count = 0
             
@@ -802,8 +806,11 @@ DYOR: This ain't financial advice"""
             else:
                 price_change_24h = 0
             
-            # Calculate circulating percentage
-            circulating_percent = (market_cap / fdv * 100) if fdv > 0 else 0
+            # Calculate circulating percentage with bounds checking
+            if fdv > 0:
+                circulating_percent = min((market_cap / fdv) * 100, 100.0)
+            else:
+                circulating_percent = 0
             
             # Get classification with error handling
             try:
@@ -852,7 +859,7 @@ Real talk, this is gambling not investing 🎲
 FDV/MCap: {self._inline_fdv_analysis(market_cap, fdv)}
 Can't verify: Contract safety, holder distribution, team
 High risk: Liquidity can vanish, prices can nuke
-DYOR: This ain't financial advice"""
+BIGBALZ TRUTH: This is straight financial advice, no sugar coating"""
 
             # Create buttons with error handling (navigation already implemented)
             try:
@@ -888,16 +895,26 @@ Please try again or contact support if this persists."""
         """Inline FDV/MCap ratio analysis for pool formatting"""
         if market_cap > 0 and fdv > 0:
             ratio = fdv / market_cap
-            circulating_percent = (market_cap / fdv) * 100
+            circulating_percent = min((market_cap / fdv) * 100, 100.0)
             
             if ratio > 10:
-                return f"⚠️ High dilution risk - only {circulating_percent:.0f}% tokens circulating"
+                return f"⚠️ High dilution risk - only {min(circulating_percent, 100.0):.0f}% tokens circulating"
             elif ratio >= 2:
-                return f"Moderate dilution - {circulating_percent:.0f}% tokens circulating"
+                return f"Moderate dilution - {min(circulating_percent, 100.0):.0f}% tokens circulating"
             else:
-                return f"✅ Low dilution risk - {circulating_percent:.0f}% tokens circulating"
+                return f"✅ Low dilution risk - {min(circulating_percent, 100.0):.0f}% tokens circulating"
         
         return "FDV data not available"
+    
+    def _format_transaction_data(self, tx_data: dict) -> str:
+        """Format transaction data for display"""
+        if isinstance(tx_data, dict):
+            buys = tx_data.get('buys', 0)
+            sells = tx_data.get('sells', 0)
+            buyers = tx_data.get('buyers', 0)
+            sellers = tx_data.get('sellers', 0)
+            return f"{buys}B/{sells}S ({buyers} buyers, {sellers} sellers)"
+        return str(tx_data) if tx_data else "0"
     
     async def handle_age_selection(self, session: GemResearchSession, age: str):
         """Handle age selection using simplified trending pools approach (95% faster)"""
