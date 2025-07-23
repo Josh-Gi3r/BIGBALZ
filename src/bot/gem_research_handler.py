@@ -566,9 +566,9 @@ Real talk, this is gambling not investing 🎲
 ⚠️ REALITY CHECK
 
 FDV/MCap: {fdv_analysis}
+
 Can't verify: Contract safety, holder distribution, team
-High risk: Liquidity can vanish, prices can nuke
-BIGBALZ TRUTH: This is straight financial advice, no sugar coating"""
+High risk: Liquidity can vanish, prices can nuke"""
 
         buttons = self.create_gem_action_buttons(
             token_data.network, 
@@ -857,9 +857,9 @@ Real talk, this is gambling not investing 🎲
 ⚠️ REALITY CHECK
 
 FDV/MCap: {self._inline_fdv_analysis(market_cap, fdv)}
+
 Can't verify: Contract safety, holder distribution, team
-High risk: Liquidity can vanish, prices can nuke
-BIGBALZ TRUTH: This is straight financial advice, no sugar coating"""
+High risk: Liquidity can vanish, prices can nuke"""
 
             # Create buttons with error handling (navigation already implemented)
             try:
