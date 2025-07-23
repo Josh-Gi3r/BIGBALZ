@@ -204,9 +204,9 @@ class MessageFormatter:
         
         # Handle both dict and int for moonshot_count
         if isinstance(moonshot_count, dict):
-            moonshot_100x = moonshot_count.get('100x', 0)
-            moonshot_10x = moonshot_count.get('10x', 0)
-            moonshot_2x = moonshot_count.get('2x', 0)
+            moonshot_100x = moonshot_count.get('POTENTIAL 100X', 0)
+            moonshot_10x = moonshot_count.get('POTENTIAL 10X', 0)
+            moonshot_2x = moonshot_count.get('POTENTIAL 2X', 0)
         else:
             # Legacy support
             moonshot_100x = moonshot_count
