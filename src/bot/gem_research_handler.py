@@ -849,7 +849,7 @@ Real talk, this is gambling not investing 🎲
 
 ⚠️ REALITY CHECK
 
-FDV/MCap: {self.format_fdv_analysis(market_cap, fdv)}
+FDV/MCap: {self._inline_fdv_analysis(market_cap, fdv)}
 Can't verify: Contract safety, holder distribution, team
 High risk: Liquidity can vanish, prices can nuke
 DYOR: This ain't financial advice"""
@@ -883,6 +883,21 @@ This is likely due to unexpected API response structure.
 Please try again or contact support if this persists."""
             
             return fallback_message, InlineKeyboardMarkup([])
+    
+    def _inline_fdv_analysis(self, market_cap: float, fdv: float) -> str:
+        """Inline FDV/MCap ratio analysis for pool formatting"""
+        if market_cap > 0 and fdv > 0:
+            ratio = fdv / market_cap
+            circulating_percent = (market_cap / fdv) * 100
+            
+            if ratio > 10:
+                return f"⚠️ High dilution risk - only {circulating_percent:.0f}% tokens circulating"
+            elif ratio >= 2:
+                return f"Moderate dilution - {circulating_percent:.0f}% tokens circulating"
+            else:
+                return f"✅ Low dilution risk - {circulating_percent:.0f}% tokens circulating"
+        
+        return "FDV data not available"
     
     async def handle_age_selection(self, session: GemResearchSession, age: str):
         """Handle age selection using simplified trending pools approach (95% faster)"""
