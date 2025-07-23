@@ -566,9 +566,9 @@ Real talk, this is gambling not investing 🎲
 ⚠️ REALITY CHECK
 
 FDV/MCap: {fdv_analysis}
+
 Can't verify: Contract safety, holder distribution, team
-High risk: Liquidity can vanish, prices can nuke
-DYOR: This ain't financial advice"""
+High risk: Liquidity can vanish, prices can nuke"""
 
         buttons = self.create_gem_action_buttons(
             token_data.network, 
@@ -850,9 +850,9 @@ Real talk, this is gambling not investing 🎲
 ⚠️ REALITY CHECK
 
 FDV/MCap: {self._inline_fdv_analysis(market_cap, fdv)}
+
 Can't verify: Contract safety, holder distribution, team
-High risk: Liquidity can vanish, prices can nuke
-DYOR: This ain't financial advice"""
+High risk: Liquidity can vanish, prices can nuke"""
 
             # Create buttons with error handling (navigation already implemented)
             try:
@@ -888,7 +888,7 @@ Please try again or contact support if this persists."""
         """Inline FDV/MCap ratio analysis for pool formatting"""
         if market_cap > 0 and fdv > 0:
             ratio = fdv / market_cap
-            circulating_percent = (market_cap / fdv) * 100
+            circulating_percent = min((market_cap / fdv) * 100, 100.0)
             
             if ratio > 10:
                 return f"⚠️ High dilution risk - only {circulating_percent:.0f}% tokens circulating"
@@ -898,6 +898,16 @@ Please try again or contact support if this persists."""
                 return f"✅ Low dilution risk - {circulating_percent:.0f}% tokens circulating"
         
         return "FDV data not available"
+    
+    def _format_transaction_data(self, tx_data: dict) -> str:
+        """Format transaction data for display"""
+        if isinstance(tx_data, dict):
+            buys = tx_data.get('buys', 0)
+            sells = tx_data.get('sells', 0)
+            buyers = tx_data.get('buyers', 0)
+            sellers = tx_data.get('sellers', 0)
+            return f"{buys}B/{sells}S ({buyers} buyers, {sellers} sellers)"
+        return str(tx_data) if tx_data else "0"
     
     async def handle_age_selection(self, session: GemResearchSession, age: str):
         """Handle age selection using simplified trending pools approach (95% faster)"""
