@@ -699,17 +699,27 @@ DYOR: This ain't financial advice"""
         """Extract contract address from pool data using relationships.base_token.data.id"""
         try:
             relationships = pool.get('relationships', {})
-            base_token = relationships.get('base_token', {})
-            data = base_token.get('data', {})
-            token_id = data.get('id')
+            if isinstance(relationships, dict):
+                base_token = relationships.get('base_token', {})
+                if isinstance(base_token, dict):
+                    data = base_token.get('data', {})
+                    if isinstance(data, dict):
+                        token_id = data.get('id')
+                        if token_id:
+                            # Extract just the address part after the network prefix
+                            if '_' in str(token_id):
+                                return str(token_id).split('_', 1)[1]
+                            return str(token_id)
             
-            if token_id:
-                # Extract just the address part after the network prefix
-                if '_' in token_id:
-                    return token_id.split('_', 1)[1]
-                return token_id
+            attrs = pool.get('attributes', {})
+            if isinstance(attrs, dict):
+                for field in ['base_token_address', 'token_address', 'address']:
+                    if field in attrs and attrs[field]:
+                        return str(attrs[field])
+            
             return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"Contract extraction failed: {e}")
             return None
     
     def _classify_gem_from_pool(self, pool: Dict, criteria: GemCriteria) -> GemClassification:
@@ -739,38 +749,85 @@ DYOR: This ain't financial advice"""
             return self.classifications['growing_project']
     
     def format_single_gem_result_from_pool(self, pool: Dict, criteria: GemCriteria, index: int = 0, total: int = 1) -> Tuple[str, InlineKeyboardMarkup]:
-        """Format single gem result from pool data"""
+        """Format single gem result from pool data using MessageFormatter patterns"""
         try:
+            from src.bot.message_formatter import MessageFormatter
+            
             attrs = pool.get('attributes', {})
             
-            # Extract data from pool
+            # Extract data from pool with defensive programming
             symbol = attrs.get('base_token_symbol', 'UNKNOWN')
             contract_address = self._extract_contract_from_pool(pool)
-            network = criteria.network
-            market_cap = float(attrs.get('market_cap_usd', 0))
-            fdv = float(attrs.get('fdv_usd', 0))
-            liquidity = float(attrs.get('reserve_in_usd', 0))
-            volume_24h = float(attrs.get('volume_usd', {}).get('h24', 0))
-            tx_count = attrs.get('transactions', {}).get('h24', 0)
-            price_change_24h = attrs.get('price_change_percentage', {}).get('h24', 0)
+            if not contract_address:
+                contract_address = 'N/A'
+            
+            network = criteria.network if criteria and criteria.network else 'UNKNOWN'
+            
+            try:
+                market_cap = float(attrs.get('market_cap_usd', 0))
+            except (ValueError, TypeError):
+                market_cap = 0
+                
+            try:
+                fdv = float(attrs.get('fdv_usd', 0))
+            except (ValueError, TypeError):
+                fdv = 0
+                
+            try:
+                liquidity = float(attrs.get('reserve_in_usd', 0))
+            except (ValueError, TypeError):
+                liquidity = 0
+            
+            volume_data = attrs.get('volume_usd', {})
+            if isinstance(volume_data, dict):
+                try:
+                    volume_24h = float(volume_data.get('h24', 0))
+                except (ValueError, TypeError):
+                    volume_24h = 0
+            else:
+                volume_24h = 0
+            
+            tx_data = attrs.get('transactions', {})
+            if isinstance(tx_data, dict):
+                tx_count = tx_data.get('h24', 0)
+            else:
+                tx_count = 0
+            
+            price_change_data = attrs.get('price_change_percentage', {})
+            if isinstance(price_change_data, dict):
+                try:
+                    price_change_24h = float(price_change_data.get('h24', 0))
+                except (ValueError, TypeError):
+                    price_change_24h = 0
+            else:
+                price_change_24h = 0
             
             # Calculate circulating percentage
             circulating_percent = (market_cap / fdv * 100) if fdv > 0 else 0
             
-            # Get classification
-            classification = self._classify_gem_from_pool(pool, criteria)
+            # Get classification with error handling
+            try:
+                classification = self._classify_gem_from_pool(pool, criteria)
+            except Exception as e:
+                logger.error(f"Classification failed for pool: {e}")
+                classification = self.classifications['growing_project']  # fallback
             
-            # Format message
-            message = f"""Found {index + 1} of {total} gems on {network.upper()} matching your criteria:
+            market_cap_formatted = MessageFormatter._format_large_number(market_cap)
+            fdv_formatted = MessageFormatter._format_large_number(fdv)
+            liquidity_formatted = MessageFormatter._format_large_number(liquidity)
+            volume_formatted = MessageFormatter._format_large_number(volume_24h)
+            
+            # Format message following MessageFormatter patterns
+            message = f"""🎉 Found {index + 1} of {total} gems on {network.upper()} matching your criteria:
 
 {classification.emoji} {classification.name}
 
 ${symbol}
 
-💰 MCap: ${market_cap:,.0f} | FDV: ${fdv:,.0f} ({circulating_percent:.1f}% circulating)
-💧 Liquidity: ${liquidity:,.0f}
-📊 Volume 24h: ${volume_24h:,.0f} | Txs: {tx_count}
-📈 24h: {price_change_24h:.1f}%
+💰 MCap: {market_cap_formatted} | FDV: {fdv_formatted} ({circulating_percent:.1f}% circulating)
+💧 Liquidity: {liquidity_formatted}
+📊 Volume 24h: {volume_formatted} | Txs: {tx_count}
+📈 24h: {price_change_24h:+.1f}%
 
 📱 Contract: `{contract_address}`
 🌐 Network: {network}
@@ -797,14 +854,35 @@ Can't verify: Contract safety, holder distribution, team
 High risk: Liquidity can vanish, prices can nuke
 DYOR: This ain't financial advice"""
 
-            # Create buttons
-            buttons = self.create_gem_action_buttons(network, contract_address, index, total)
+            # Create buttons with error handling (navigation already implemented)
+            try:
+                buttons = self.create_gem_action_buttons(network, contract_address, index, total)
+            except Exception as e:
+                logger.error(f"Button creation failed: {e}")
+                buttons = InlineKeyboardMarkup([])
             
             return message, buttons
             
         except Exception as e:
-            logger.error(f"Error formatting gem result: {e}")
-            return "Error formatting gem result", InlineKeyboardMarkup([])
+            logger.error(f"Error formatting gem result - Pool data keys: {list(pool.keys()) if isinstance(pool, dict) else 'Not a dict'}")
+            if isinstance(pool, dict) and 'attributes' in pool:
+                attrs = pool.get('attributes', {})
+                logger.error(f"Error formatting gem result - Attributes keys: {list(attrs.keys())}")
+            logger.error(f"Error formatting gem result - Criteria: {criteria}")
+            logger.error(f"Error formatting gem result - Exception: {e}")
+            import traceback
+            logger.error(f"Error formatting gem result - Traceback: {traceback.format_exc()}")
+            
+            fallback_message = f"""❌ Display Error
+
+Found gem but couldn't format display properly.
+
+Raw data available but formatting failed.
+This is likely due to unexpected API response structure.
+
+Please try again or contact support if this persists."""
+            
+            return fallback_message, InlineKeyboardMarkup([])
     
     async def handle_age_selection(self, session: GemResearchSession, age: str):
         """Handle age selection using simplified trending pools approach (95% faster)"""
