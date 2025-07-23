@@ -488,14 +488,13 @@ Market conditions:
         """Format FDV/MCap ratio analysis"""
         if token_data.market_cap_usd > 0 and token_data.fdv_usd > 0:
             ratio = token_data.fdv_usd / token_data.market_cap_usd
-            circulating_percent = (token_data.market_cap_usd / token_data.fdv_usd) * 100
             
             if ratio > 10:
-                return f"⚠️ High dilution risk - only {circulating_percent:.0f}% tokens circulating"
+                return f"⚠️ High dilution risk"
             elif ratio >= 2:
-                return f"Moderate dilution - {circulating_percent:.0f}% tokens circulating"
+                return f"Moderate dilution"
             else:
-                return f"✅ Low dilution risk - {circulating_percent:.0f}% tokens circulating"
+                return f"✅ Low dilution risk"
         
         return "FDV data not available"
     
@@ -513,12 +512,8 @@ Market conditions:
         liquidity = MessageFormatter._format_large_number(token_data.liquidity_usd)
         volume = MessageFormatter._format_large_number(token_data.volume_24h)
         
-        # Calculate circulating percentage
-        circulating_percent = 0
-        if token_data.market_cap_usd > 0 and token_data.fdv_usd > 0:
-            circulating_percent = (token_data.market_cap_usd / token_data.fdv_usd) * 100
-        
         # Get network display name
+        
         network_names = {
             'solana': 'Solana',
             'eth': 'Ethereum',
@@ -540,7 +535,7 @@ Market conditions:
 
 ${token_data.symbol}
 
-💰 MCap: {market_cap} | FDV: {fdv} ({circulating_percent:.0f}% circulating)
+💰 MCap: {market_cap} | FDV: {fdv}
 💧 Liquidity: {liquidity}
 📊 Volume 24h: {volume} | Txs: {tx_count}
 📈 24h: {token_data.price_change_24h:+.1f}% | {timeframe}: {price_change:+.1f}%
@@ -802,10 +797,8 @@ High risk: Liquidity can vanish, prices can nuke"""
             else:
                 price_change_24h = 0
             
-            # Calculate circulating percentage
-            circulating_percent = (market_cap / fdv * 100) if fdv > 0 else 0
-            
             # Get classification with error handling
+            
             try:
                 classification = self._classify_gem_from_pool(pool, criteria)
             except Exception as e:
@@ -824,9 +817,9 @@ High risk: Liquidity can vanish, prices can nuke"""
 
 ${symbol}
 
-💰 MCap: {market_cap_formatted} | FDV: {fdv_formatted} ({circulating_percent:.1f}% circulating)
+💰 MCap: {market_cap_formatted} | FDV: {fdv_formatted}
 💧 Liquidity: {liquidity_formatted}
-📊 Volume 24h: {volume_formatted} | Txs: {tx_count}
+📊 Volume 24h: {volume_formatted} | Txs: {self._format_transaction_data(tx_count)}
 📈 24h: {price_change_24h:+.1f}%
 
 📱 Contract: `{contract_address}`
@@ -888,14 +881,13 @@ Please try again or contact support if this persists."""
         """Inline FDV/MCap ratio analysis for pool formatting"""
         if market_cap > 0 and fdv > 0:
             ratio = fdv / market_cap
-            circulating_percent = min((market_cap / fdv) * 100, 100.0)
             
             if ratio > 10:
-                return f"⚠️ High dilution risk - only {circulating_percent:.0f}% tokens circulating"
+                return f"⚠️ High dilution risk"
             elif ratio >= 2:
-                return f"Moderate dilution - {circulating_percent:.0f}% tokens circulating"
+                return f"Moderate dilution"
             else:
-                return f"✅ Low dilution risk - {circulating_percent:.0f}% tokens circulating"
+                return f"✅ Low dilution risk"
         
         return "FDV data not available"
     
