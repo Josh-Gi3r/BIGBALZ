@@ -69,16 +69,16 @@ class ResponseMemoryManager:
                 'financial natural selection'
             ],
             'troll_responses': [
-                'k',
-                'sure thing',
-                'imagine',
-                'embarrassing',
-                'try harder',
-                'yawn',
-                'next',
-                'moving on',
-                'anyway',
-                'cool story'
+                'savage comeback',
+                'roast',
+                'clap back',
+                'witty insult',
+                'sassy response',
+                'burn',
+                'comeback',
+                'savage',
+                'destroyed',
+                'obliterated'
             ]
         }
         
