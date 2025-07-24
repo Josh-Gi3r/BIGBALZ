@@ -338,6 +338,8 @@ class ButtonHandler:
         Shows complete BALZ classification with no further buttons
         """
         try:
+            user_id = query.from_user.id
+            
             # Show loading message
             await query.edit_message_text("⚖️ Analyzing BALZ classification...")
             
@@ -379,7 +381,7 @@ class ButtonHandler:
             # Generate response
             if self.response_generator:
                 response = await self.response_generator.generate_balz_response(
-                    classification, token_data
+                    classification, token_data, user_id=user_id
                 )
             else:
                 # Fallback response if no OpenAI

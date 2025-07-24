@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import random
 
 from .reasoning_engine import BALZCategory, TokenClassification
+from ai.response_memory import ResponseMemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -75,15 +76,19 @@ class ResponseGenerator:
         # Fallback responses in case OpenAI fails
         self.fallback_responses = self._load_fallback_responses()
         
+        self.memory_manager = ResponseMemoryManager(phrase_cooldown_minutes=20)
+        
     async def generate_balz_response(self, 
                                    classification: TokenClassification,
-                                   token_data: Any) -> str:
+                                   token_data: Any,
+                                   user_id: Optional[int] = None) -> str:
         """
         Generate energy-matched BALZ classification response
         
         Args:
             classification: Token classification result
             token_data: Token data dictionary
+            user_id: Optional user ID for memory tracking
             
         Returns:
             Energy-matched response string
@@ -93,7 +98,7 @@ class ResponseGenerator:
             
             # Build the prompt
             prompt = self._build_balz_prompt(classification, token_data)
-            system_prompt = self._get_system_prompt(classification.category)
+            system_prompt = self._get_system_prompt(classification.category, user_id)
             
             # Make API call with retry logic
             response = await self._call_openai_with_retry(
@@ -103,14 +108,16 @@ class ResponseGenerator:
             )
             
             if response:
+                if user_id:
+                    self._track_response_patterns(user_id, response, classification.category)
                 return self._format_balz_response(response, classification)
             else:
                 # Use fallback if OpenAI fails
-                return self._get_fallback_response(classification, token_data)
+                return self._get_fallback_response(classification, token_data, user_id)
                 
         except Exception as e:
             logger.error(f"Error generating BALZ response: {e}")
-            return self._get_fallback_response(classification, token_data)
+            return self._get_fallback_response(classification, token_data, user_id)
     
     async def _call_openai_with_retry(self, system_prompt: str, 
                                     user_prompt: str,
@@ -148,13 +155,18 @@ class ResponseGenerator:
                 
         return None
     
-    def _get_system_prompt(self, category: BALZCategory) -> str:
+    def _get_system_prompt(self, category: BALZCategory, user_id: Optional[int] = None) -> str:
         """Get system prompt based on category energy"""
         base_prompt = """You are BIGBALZ Bot - not particularly bright but you've got opinions.
 Keep it simple, use small words, and deliver dry humor without explaining jokes.
 You're barely paying attention but somehow your takes are funny.
 
 IMPORTANT: Format your assessment with line breaks between different thoughts. No walls of text."""
+        
+        if user_id:
+            memory_context = self.memory_manager.get_response_variation_context(user_id)
+            if memory_context['interaction_count'] > 2:
+                base_prompt += f"\n\nMEMORY NOTE: You've interacted with this user {memory_context['interaction_count']} times. Vary your responses and avoid repeating the same phrases or jokes."
         
         if category == BALZCategory.TRASH:
             return f"""{base_prompt}
@@ -373,16 +385,26 @@ if you don't buy this you're actually stupid. there i said it.
         }
     
     def _get_fallback_response(self, classification: TokenClassification,
-                              token_data: Any) -> str:
+                              token_data: Any, user_id: Optional[int] = None) -> str:
         """Get fallback response when OpenAI fails"""
         fallbacks = self.fallback_responses.get(classification.category, [])
         if not fallbacks:
             return f"BALZ RANK: {classification.emoji} {classification.category.value}\n\nAnalysis complete. Unable to generate detailed response."
         
-        # Select random fallback and format with data
-        template = random.choice(fallbacks)
+        if user_id and len(fallbacks) > 1:
+            memory_context = self.memory_manager.get_response_variation_context(user_id)
+            available_fallbacks = []
+            
+            for template in fallbacks:
+                template_phrases = template.lower().split()
+                if any(self.memory_manager.should_use_phrase(user_id, phrase) for phrase in template_phrases[:3]):
+                    available_fallbacks.append(template)
+            
+            template = random.choice(available_fallbacks if available_fallbacks else fallbacks)
+        else:
+            template = random.choice(fallbacks)
         
-        return template.format(
+        response = template.format(
             sub_category=classification.sub_category,
             liquidity_tier=classification.liquidity_tier,
             volume_tier=classification.volume_tier,
@@ -390,3 +412,31 @@ if you don't buy this you're actually stupid. there i said it.
             emoji=classification.emoji,
             category=classification.category.value
         )
+        
+        if user_id:
+            self._track_response_patterns(user_id, response, classification.category)
+        
+        return response
+    
+    def _track_response_patterns(self, user_id: int, response: str, category: BALZCategory):
+        """Track response patterns for memory system"""
+        response_lower = response.lower()
+        
+        if any(phrase in response_lower for phrase in ['casino', 'house always wins', 'gambling']):
+            self.memory_manager.record_phrase_usage(user_id, "casino reference", "casino_gambling")
+        
+        if any(phrase in response_lower for phrase in ['moon', 'lambo', 'wagmi', 'lfg']):
+            self.memory_manager.record_phrase_usage(user_id, "moon reference", "moon_references")
+        
+        if any(phrase in response_lower for phrase in ['poverty', 'mcdonalds', 'ramen']):
+            self.memory_manager.record_phrase_usage(user_id, "harsh reality", "harsh_reality")
+        
+        pattern_map = {
+            BALZCategory.TRASH: "harsh_dismissive",
+            BALZCategory.RISKY: "skeptical_sarcastic", 
+            BALZCategory.CAUTION: "neutral_measured",
+            BALZCategory.OPPORTUNITY: "excited_positive"
+        }
+        
+        if category in pattern_map:
+            self.memory_manager.record_response_pattern(user_id, pattern_map[category])

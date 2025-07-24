@@ -12,6 +12,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import json
 
+from ai.response_memory import ResponseMemoryManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,12 +41,14 @@ class ConversationHandler:
         
         # Conversation history cache (user_id -> messages)
         self.conversation_history = {}
-        self.history_ttl = 3600  # 1 hour
-        self.max_history_length = 10  # Keep last 10 messages per user
+        self.history_ttl = 7200  # 2 hours for better context retention
+        self.max_history_length = 20  # Keep last 20 messages per user for better context
         
         # Group chat activity tracking (chat_id -> last_bot_message_time)
         self.group_activity = {}
         self.activity_window = 60  # 60 seconds
+        
+        self.memory_manager = ResponseMemoryManager(phrase_cooldown_minutes=15)
         
         # System prompt for bot personality
         self.system_prompt = """You're BIGBALZ - just a regular dude in the chat. Not particularly bright, but you've got spirit.
@@ -121,20 +125,48 @@ Formatting:
             
             # Check for pineapple pizza mentions (high priority)
             if self._is_pineapple_pizza_mention(message):
-                # Respond with quick disgust then move on
-                if is_group_chat and chat_id:
-                    self._update_activity(chat_id)
-                # Add context for AI about pineapple pizza
-                messages = [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "system", "content": "Someone mentioned pineapple pizza. Make ONE disgusted comment about it (keep it short) then answer their actual question or respond to the rest of their message. Don't go on a rant."},
-                    {"role": "user", "content": message}
-                ]
-                response = await self._call_openai(messages)
-                if response:
-                    self._update_history(user_id, message, response)
-                    return response
-                return "pineapple on pizza? are you fucking kidding me right now? that's not food, that's a war crime"
+                # Check if pineapple pizza response is on cooldown
+                if not self.memory_manager.should_use_phrase(user_id, "pineapple pizza", "pineapple_pizza"):
+                    pass
+                else:
+                    # Respond with quick disgust then move on
+                    if is_group_chat and chat_id:
+                        self._update_activity(chat_id)
+                    
+                    memory_context = self.memory_manager.get_response_variation_context(user_id)
+                    
+                    # Add context for AI about pineapple pizza with memory awareness
+                    pineapple_context = "Someone mentioned pineapple pizza. Make ONE disgusted comment about it (keep it short) then answer their actual question or respond to the rest of their message. Don't go on a rant."
+                    
+                    if memory_context['interaction_count'] > 3:
+                        pineapple_context += " You've interacted with this user before, so vary your pineapple pizza disgust - don't use the exact same phrases."
+                    
+                    messages = [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "system", "content": pineapple_context},
+                        {"role": "user", "content": message}
+                    ]
+                    response = await self._call_openai(messages)
+                    if response:
+                        self._update_history(user_id, message, response)
+                        self.memory_manager.record_phrase_usage(user_id, "pineapple pizza", "pineapple_pizza")
+                        self.memory_manager.record_response_pattern(user_id, "disgusted")
+                        return response
+                    
+                    # Fallback with memory check
+                    fallback_responses = [
+                        "pineapple on pizza? are you fucking kidding me right now? that's not food, that's a war crime",
+                        "pineapple pizza is an abomination and you can't change my mind",
+                        "whoever invented pineapple pizza should be banned from all kitchens",
+                        "pineapple belongs on a beach, not on pizza. this is basic science"
+                    ]
+                    
+                    for fallback in fallback_responses:
+                        if self.memory_manager.should_use_phrase(user_id, fallback, "pineapple_pizza"):
+                            self.memory_manager.record_phrase_usage(user_id, fallback, "pineapple_pizza")
+                            return fallback
+                    
+                    return fallback_responses[0]
             
             # Check for insults/trolling (high priority)
             if self._is_insult_or_troll(message):
@@ -198,10 +230,24 @@ Formatting:
             message_lower = message.lower()
             positive_triggers = ["how's things", "how's everyone", "how are you", "what's up", "gm", "good morning", "vibes"]
             if any(trigger in message_lower for trigger in positive_triggers):
+                memory_context = self.memory_manager.get_response_variation_context(user_id)
+                
+                moon_context = "Someone's checking vibes. Time to spread MAXIMUM POSITIVITY about crypto. We're ALL gonna make it. This is THE cycle. Lambos incoming. Generational wealth loading. Be hyped but still dumb."
+                
+                if memory_context['interaction_count'] > 2:
+                    available_moon_phrases = memory_context['available_signature_phrases'].get('moon_references', [])
+                    if len(available_moon_phrases) < 3:  # Most moon phrases used recently
+                        moon_context += " You've been very moon-positive recently, so vary your crypto enthusiasm - maybe be excited but use different phrases."
+                
                 messages.append({
                     "role": "system",
-                    "content": "Someone's checking vibes. Time to spread MAXIMUM POSITIVITY about crypto. We're ALL gonna make it. This is THE cycle. Lambos incoming. Generational wealth loading. Be hyped but still dumb."
+                    "content": moon_context
                 })
+            
+            # Add context awareness if we have conversation history
+            if len(user_history) > 2:
+                context_note = f"CONTEXT: You've been chatting with this user. Keep the conversation flowing naturally and remember what you've discussed. Don't repeat yourself unless it's your signature style."
+                messages.append({"role": "system", "content": context_note})
             
             # Add conversation history
             messages.extend(user_history)
@@ -209,12 +255,30 @@ Formatting:
             # Add current message
             messages.append({"role": "user", "content": message})
             
+            memory_context = self.memory_manager.get_response_variation_context(user_id)
+            
+            if memory_context['interaction_count'] > 1:
+                personality_variation = self.memory_manager.suggest_personality_variation(
+                    user_id, "Your usual BIGBALZ personality"
+                )
+                messages.append({
+                    "role": "system",
+                    "content": f"Personality note: {personality_variation}"
+                })
+            
             # Generate response
             response = await self._call_openai(messages)
             
             if response:
                 # Update conversation history
                 self._update_history(user_id, message, response)
+                
+                if "moon" in response.lower() or "lambo" in response.lower():
+                    self.memory_manager.record_response_pattern(user_id, "moon_positive")
+                elif any(word in response.lower() for word in ["whatever", "meh", "sure"]):
+                    self.memory_manager.record_response_pattern(user_id, "dismissive")
+                elif any(word in response.lower() for word in ["lmao", "bruh", "imagine"]):
+                    self.memory_manager.record_response_pattern(user_id, "sarcastic")
                 
                 # Track activity in group chats
                 if is_group_chat and chat_id:
@@ -268,7 +332,7 @@ Formatting:
         return None
     
     def _get_user_history(self, user_id: int) -> List[Dict[str, str]]:
-        """Get conversation history for a user"""
+        """Get conversation history for a user with context summary"""
         if user_id not in self.conversation_history:
             return []
         
@@ -279,22 +343,43 @@ Formatting:
             del self.conversation_history[user_id]
             return []
         
-        return history_data['messages']
+        messages = history_data['messages'].copy()
+        
+        if len(messages) > 10:
+            topics = history_data.get('topics_discussed', set())
+            if topics:
+                context_summary = f"CONVERSATION CONTEXT: You've been discussing {', '.join(topics)} with this user."
+                messages.insert(0, {"role": "system", "content": context_summary})
+        
+        return messages
     
     def _update_history(self, user_id: int, user_message: str, bot_response: str):
-        """Update conversation history for a user"""
+        """Update conversation history for a user with enhanced context tracking"""
         if user_id not in self.conversation_history:
             self.conversation_history[user_id] = {
                 'messages': [],
-                'last_update': datetime.now()
+                'last_update': datetime.now(),
+                'topics_discussed': set(),  # Track topics for better context
+                'interaction_count': 0
             }
         
         history = self.conversation_history[user_id]
+        history['interaction_count'] += 1
+        
+        # Track topics mentioned in the conversation
+        message_lower = user_message.lower()
+        if any(word in message_lower for word in ['token', 'coin', 'crypto', 'contract']):
+            history['topics_discussed'].add('crypto_analysis')
+        if any(word in message_lower for word in ['moon', 'lambo', 'rich', 'gains']):
+            history['topics_discussed'].add('moon_talk')
+        if 'pineapple' in message_lower and 'pizza' in message_lower:
+            history['topics_discussed'].add('pineapple_pizza')
+        
         history['messages'].append({"role": "user", "content": user_message})
         history['messages'].append({"role": "assistant", "content": bot_response})
         history['last_update'] = datetime.now()
         
-        # Keep only last N messages
+        # Keep only last N messages but maintain more context
         if len(history['messages']) > self.max_history_length * 2:
             history['messages'] = history['messages'][-self.max_history_length * 2:]
     
@@ -360,6 +445,8 @@ Formatting:
         
         if expired_users:
             logger.info(f"Cleared {len(expired_users)} expired conversation histories")
+        
+        self.memory_manager.cleanup_old_memories()
     
     async def moderate_message(self, message: str) -> Dict[str, Any]:
         """
