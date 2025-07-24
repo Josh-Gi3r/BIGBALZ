@@ -37,6 +37,10 @@ class ConversationHandler:
             logger.error(f"Failed to initialize OpenAI client: {e}")
             raise
         
+        # Initialize memory manager
+        from .response_memory import ResponseMemoryManager
+        self.memory_manager = ResponseMemoryManager(phrase_cooldown_minutes=15)
+        
         # Conversation history cache (user_id -> messages)
         self.conversation_history = {}
         self.history_ttl = 3600  # 1 hour
@@ -121,37 +125,65 @@ Formatting:
             
             # Check for pineapple pizza mentions (high priority)
             if self._is_pineapple_pizza_mention(message):
-                # Respond with quick disgust then move on
-                if is_group_chat and chat_id:
-                    self._update_activity(chat_id)
-                # Add context for AI about pineapple pizza
-                messages = [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "system", "content": "Someone mentioned pineapple pizza. Make ONE disgusted comment about it (keep it short) then answer their actual question or respond to the rest of their message. Don't go on a rant."},
-                    {"role": "user", "content": message}
-                ]
-                response = await self._call_openai(messages)
-                if response:
-                    self._update_history(user_id, message, response)
-                    return response
-                return "pineapple on pizza? are you fucking kidding me right now? that's not food, that's a war crime"
+                from .response_memory import SignaturePhrase
+                personality_level = self.memory_manager.update_interaction(user_id)
+                
+                # Check if pineapple pizza phrase is available
+                if self.memory_manager.can_use_phrase(user_id, SignaturePhrase.PINEAPPLE_PIZZA):
+                    self.memory_manager.mark_phrase_used(user_id, SignaturePhrase.PINEAPPLE_PIZZA)
+                    
+                    # Track activity in group chats
+                    if is_group_chat and chat_id:
+                        self._update_activity(chat_id)
+                    
+                    # Add personality-aware context for AI about pineapple pizza
+                    personality_context = self._get_personality_context(personality_level)
+                    messages = [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "system", "content": personality_context},
+                        {"role": "system", "content": "Someone mentioned pineapple pizza. Make ONE disgusted comment about it (keep it short) then answer their actual question or respond to the rest of their message. Don't go on a rant."},
+                        {"role": "user", "content": message}
+                    ]
+                    response = await self._call_openai(messages)
+                    if response:
+                        self._update_history(user_id, message, response)
+                        return response
+                    return "pineapple on pizza? are you fucking kidding me right now? that's not food, that's a war crime"
+                else:
+                    fallback_responses = self._get_pineapple_fallback_responses(personality_level)
+                    return random.choice(fallback_responses)
             
             # Check for insults/trolling (high priority)
             if self._is_insult_or_troll(message):
-                # Always clap back at insults
-                if is_group_chat and chat_id:
-                    self._update_activity(chat_id)
-                # Add context for AI about being insulted
-                messages = [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "system", "content": "Someone is trying to insult or troll you. Time to get EXTREMELY sassy. Roast them into oblivion. Be creative and savage."},
-                    {"role": "user", "content": message}
-                ]
-                response = await self._call_openai(messages)
-                if response:
-                    self._update_history(user_id, message, response)
-                    return response
-                return "imagine trying to roast me and failing this hard. embarrassing."
+                from .response_memory import SignaturePhrase
+                personality_level = self.memory_manager.update_interaction(user_id)
+                
+                # Check if troll response phrase is available
+                if self.memory_manager.can_use_phrase(user_id, SignaturePhrase.TROLL_RESPONSES):
+                    self.memory_manager.mark_phrase_used(user_id, SignaturePhrase.TROLL_RESPONSES)
+                    
+                    # Track activity in group chats
+                    if is_group_chat and chat_id:
+                        self._update_activity(chat_id)
+                    
+                    # Add personality-aware context for savage comeback
+                    personality_context = self._get_personality_context(personality_level)
+                    troll_context = self._get_troll_response_context(personality_level)
+                    
+                    messages = [
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "system", "content": personality_context},
+                        {"role": "system", "content": troll_context},
+                        {"role": "user", "content": message}
+                    ]
+                    response = await self._call_openai(messages)
+                    if response:
+                        self._update_history(user_id, message, response)
+                        return response
+                    return "imagine trying to roast me and failing this hard. embarrassing."
+                else:
+                    fallback_responses = self._get_troll_fallback_responses(personality_level)
+                    return random.choice(fallback_responses)
             
             # Check for ecosystem-related questions (beta response)
             beta_response = self._check_ecosystem_questions(message)
@@ -198,10 +230,18 @@ Formatting:
             message_lower = message.lower()
             positive_triggers = ["how's things", "how's everyone", "how are you", "what's up", "gm", "good morning", "vibes"]
             if any(trigger in message_lower for trigger in positive_triggers):
-                messages.append({
-                    "role": "system",
-                    "content": "Someone's checking vibes. Time to spread MAXIMUM POSITIVITY about crypto. We're ALL gonna make it. This is THE cycle. Lambos incoming. Generational wealth loading. Be hyped but still dumb."
-                })
+                from .response_memory import SignaturePhrase
+                personality_level = self.memory_manager.update_interaction(user_id)
+                
+                if self.memory_manager.can_use_phrase(user_id, SignaturePhrase.MOON_REFERENCES):
+                    self.memory_manager.mark_phrase_used(user_id, SignaturePhrase.MOON_REFERENCES)
+                    moon_context = "Someone's checking vibes. Time to spread MAXIMUM POSITIVITY about crypto. We're ALL gonna make it. This is THE cycle. Lambos incoming. Generational wealth loading. Be hyped but still dumb."
+                else:
+                    moon_context = "Someone's checking vibes. Be positive about crypto but keep it more subdued since you've been moon-posting recently."
+                
+                personality_context = self._get_personality_context(personality_level)
+                messages.append({"role": "system", "content": personality_context})
+                messages.append({"role": "system", "content": moon_context})
             
             # Add conversation history
             messages.extend(user_history)
@@ -347,7 +387,7 @@ Formatting:
             ])
     
     def clear_old_histories(self):
-        """Clean up old conversation histories"""
+        """Clean up old conversation histories and memory data"""
         current_time = datetime.now()
         expired_users = []
         
@@ -360,6 +400,9 @@ Formatting:
         
         if expired_users:
             logger.info(f"Cleared {len(expired_users)} expired conversation histories")
+        
+        # Also cleanup memory manager
+        self.memory_manager.cleanup_old_memories()
     
     async def moderate_message(self, message: str) -> Dict[str, Any]:
         """
@@ -1054,4 +1097,69 @@ Just drop any contract from these networks and I'll auto-detect it.
 Example formats:
 • ETH/BSC/Base: 0x123...abc
 • Solana: 7EYnhQoR9YM3...pump"""
+    
+    def _get_personality_context(self, personality_level) -> str:
+        """Get personality context based on interaction history"""
+        from .response_memory import PersonalityLevel
+        
+        if personality_level == PersonalityLevel.FRESH:
+            return "This is a new user you haven't talked to much. Be your usual self but maybe slightly more welcoming."
+        elif personality_level == PersonalityLevel.FAMILIAR:
+            return "You've chatted with this user a few times. You can be more casual and reference that you've talked before."
+        else:  # ESTABLISHED
+            return "This is a regular you know well. Be more familiar, maybe reference past conversations, and show that you remember them."
+    
+    def _get_pineapple_fallback_responses(self, personality_level) -> List[str]:
+        """Get fallback responses for pineapple pizza when phrase is in cooldown"""
+        from .response_memory import PersonalityLevel
+        
+        base_responses = [
+            "we've been through this already",
+            "you know how i feel about that",
+            "not this again",
+            "seriously?",
+            "moving on..."
+        ]
+        
+        if personality_level == PersonalityLevel.ESTABLISHED:
+            base_responses.extend([
+                "i thought we settled this",
+                "you're really gonna make me say it again?",
+                "we've had this conversation"
+            ])
+        
+        return base_responses
+    
+    def _get_troll_response_context(self, personality_level) -> str:
+        """Get troll response context based on personality level"""
+        from .response_memory import PersonalityLevel
+        
+        base_context = "Someone is trying to insult or troll you. Give them a short, intelligent, savage comeback. Be creative and savage but not defensive. Keep it brief and cutting."
+        
+        if personality_level == PersonalityLevel.ESTABLISHED:
+            return base_context + " Since you know this user, you can be extra savage and personal in your roast."
+        else:
+            return base_context
+    
+    def _get_troll_fallback_responses(self, personality_level) -> List[str]:
+        """Get fallback responses for troll attempts when phrase is in cooldown"""
+        from .response_memory import PersonalityLevel
+        
+        base_responses = [
+            "k",
+            "sure buddy",
+            "riveting",
+            "cool story",
+            "anyway...",
+            "mmhmm"
+        ]
+        
+        if personality_level == PersonalityLevel.ESTABLISHED:
+            base_responses.extend([
+                "you're really trying this again?",
+                "we doing this dance again?",
+                "thought you'd learned by now"
+            ])
+        
+        return base_responses
     
