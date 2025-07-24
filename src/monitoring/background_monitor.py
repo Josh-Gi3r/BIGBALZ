@@ -53,6 +53,7 @@ class MoonshotAlert:
     liquidity: float
     transaction_count: int
     timestamp: datetime
+    price_usd: float  # Current token price
 
 
 class BackgroundMonitor:
@@ -987,7 +988,8 @@ class BackgroundMonitor:
                     volume_24h=volume_24h,
                     liquidity=liquidity,
                     transaction_count=tx_count_24h,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.utcnow(),
+                    price_usd=current_price
                 )
                 logger.debug(f"Created {criteria['tier']} moonshot alert for {contract} at {alert.timestamp}")
                 return alert
@@ -1065,7 +1067,7 @@ class BackgroundMonitor:
 
 {config['emoji']} {alert.tier} Moonshot: {alert.token_symbol}
 
-💰 **Price:** N/A
+💰 **Price:** ${alert.price_usd:.8f}
 
 📈 **{config['timeframe']} Change:** +{alert.price_change_percent:.1f}%
 
