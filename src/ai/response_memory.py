@@ -67,6 +67,18 @@ class ResponseMemoryManager:
                 'see you at mcdonalds',
                 'hope you like ramen',
                 'financial natural selection'
+            ],
+            'troll_responses': [
+                'k',
+                'sure thing',
+                'imagine',
+                'embarrassing',
+                'try harder',
+                'yawn',
+                'next',
+                'moving on',
+                'anyway',
+                'cool story'
             ]
         }
         

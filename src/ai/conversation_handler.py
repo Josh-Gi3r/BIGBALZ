@@ -173,13 +173,9 @@ Formatting:
                 # Always clap back at insults
                 if is_group_chat and chat_id:
                     self._update_activity(chat_id)
-                # Add context for AI about being insulted
-                messages = [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "system", "content": "Someone is trying to insult or troll you. Time to get EXTREMELY sassy. Roast them into oblivion. Be creative and savage."},
-                    {"role": "user", "content": message}
-                ]
-                response = await self._call_openai(messages)
+                
+                # Get short, direct savage response
+                response = self._get_troll_response(user_id)
                 if response:
                     self._update_history(user_id, message, response)
                     return response
@@ -772,6 +768,51 @@ Formatting:
         
         # Check for any pattern
         return any(pattern in message_lower for pattern in pineapple_patterns)
+    
+    def _get_troll_response(self, user_id: int) -> str:
+        """Get short, direct troll response with memory to avoid repetition"""
+        
+        troll_responses = [
+            "k",
+            "sure thing chief",
+            "imagine",
+            "embarrassing",
+            "try harder",
+            "yawn",
+            "next",
+            "moving on",
+            "anyway",
+            "cool story",
+            "fascinating",
+            "riveting",
+            "groundbreaking",
+            "revolutionary take",
+            "bold of you",
+            "stunning and brave",
+            "truly inspiring",
+            "what a legend",
+            "absolute unit",
+            "peak comedy",
+            "chef's kiss",
+            "rent free",
+            "cope harder",
+            "skill issue",
+            "L + ratio",
+            "didn't ask",
+            "who asked",
+            "care level: zero",
+            "noted and ignored",
+            "filing under: irrelevant"
+        ]
+        
+        # Use memory system to avoid repetition
+        for response in troll_responses:
+            if self.memory_manager.should_use_phrase(user_id, response, "troll_responses"):
+                self.memory_manager.record_phrase_usage(user_id, response, "troll_responses")
+                return response
+        
+        # Fallback if all responses are on cooldown
+        return troll_responses[0]
     
     def _is_insult_or_troll(self, message: str) -> bool:
         """Check if message is insulting or trolling the bot"""
